@@ -1,0 +1,3 @@
+[submodule "pdf-toolbox"]
+	path = pdf-toolbox
+	url = https://github.com/Yuras/pdf-toolbox.git
