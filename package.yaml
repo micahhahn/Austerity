@@ -21,9 +21,28 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- text
+- bytestring
+- io-streams
+- hashable
+- unordered-containers
+- vector
+- scientific
+- base16-bytestring
+- attoparsec
+- containers
+- cipher-rc4
+- cipher-aes
+- cryptohash
+- crypto-api
+- groom
 
 library:
-  source-dirs: src
+  source-dirs: 
+    - src
+    - pdf-toolbox/core/lib
+    - pdf-toolbox/content/lib
+    - pdf-toolbox/document/lib
 
 executables:
   Austerity-exe:
