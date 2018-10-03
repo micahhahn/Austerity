@@ -36,6 +36,7 @@ dependencies:
 - cryptohash
 - crypto-api
 - groom
+- safe-money
 
 library:
   source-dirs: 
