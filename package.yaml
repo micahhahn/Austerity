@@ -37,13 +37,13 @@ dependencies:
 - crypto-api
 - groom
 - safe-money
+- pdf-toolbox-core
+- pdf-toolbox-content
+- pdf-toolbox-document
 
 library:
   source-dirs: 
     - src
-    - pdf-toolbox/core/lib
-    - pdf-toolbox/content/lib
-    - pdf-toolbox/document/lib
 
 executables:
   Austerity-exe:

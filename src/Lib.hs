@@ -29,9 +29,8 @@ data TextBox = TextBox { _left :: Int
                        , _text :: T.Text
                        } deriving (Show)
 
-data TextSpan = TextSpan { _sLeft :: Int
-                         , _sRight :: Int
-                         , _sText :: T.Text 
+data TextSpan = TextSpan { sLeft :: Int 
+                         , sText :: T.Text
                          } deriving (Show)
 
 data Date = Date !Int16 !Int8 !Int8
@@ -133,17 +132,46 @@ parseStatementDate yt mt dt = do
     d <- toEither (readMaybe . T.init $ dt) $ "Could not parse day '" ++ (T.unpack dt) ++ "'"
     return $ Date y m d
 
+readDollars :: Text -> Either String (Dense "USD")
+readDollars t = do
+    d <- toEither (readMaybe t :: Maybe Rational) $ "Could not parse amount '" ++ (T.unpack t) ++ "'"
+    return (dense' d :: Dense "USD") 
+
+readShortDate :: Text -> (Date, Date) -> Either String Date
+readShortDate t (startDate, endDate) = do
+    let ds = T.splitOn "/" t
+    if length ds == 2 then pure () else Left $ "Expected date to be in form mm/dd"
+    let (m : d : []) = ds
+    return undefined
+    
+
 parseStatementSummary :: TextSpan -> Either String (Date, Date)
 parseStatementSummary ss = do
-    let ts = T.splitOn " " (_sText ss)
-    if length ts == 7 then Right () else Left $ "Unexpected number of arguments in statement summary header '" ++ (T.unpack . _sText $ ss) ++ "'"
-    let (sm : sd : sy : _ : em : ed : ey : []) = ts
+    let ts = T.splitOn " " (sText ss)
+    if length ts == 7 then pure () else Left $ "Unexpected number of arguments in statement summary header '" ++ (T.unpack . sText $ ss) ++ "'"
+    let (sm : sd : sy : th : em : ed : ey : []) = ts
+    if th == "through" then pure () else Left $ "Unexpected '" ++ (T.unpack th) ++ "' in statement summary header '" ++ (T.unpack . sText $ ss) ++ "'"
     sd <- parseStatementDate sy sm sd
     ed <- parseStatementDate ey em ed
     return (sd, ed)
 
+isTableHeader :: [TextSpan] -> Bool
+isTableHeader ts = if length ts /= 6 
+                   then False 
+                   else let (TextSpan _ dt : TextSpan _ pd : TextSpan _ ds : TextSpan _ dp : TextSpan _ wd : TextSpan _ db : []) = ts
+                        in dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
+
+parseTransaction :: [TextSpan] -> Int -> Either String Transaction
+parseTransaction cs wl = do
+    if length cs == 5 then pure () else Left $ "Expected 5 arguments in row, but found " ++ (show . length $ cs)
+    let (TextSpan _ dt : TextSpan _ pd : TextSpan _ dp : TextSpan l dw : TextSpan _ db : []) = cs
+    dwa <- readDollars dw
+    dba <- readDollars db
+    {- let amount = if l < wl then Deposit (dense' dw :: Dense "USD") else Withdrawal (dense' dw :: Dense "USD") -}
+    return undefined
+
 parseHeader :: [[TextSpan]] -> Either String Header
-parseHeader as = undefined {- let ((_ : s : _) : ls) = dropWhile ((/= "STATEMENT SUMMARY") . _sText . head) as
+parseHeader as = Left "asdf" {- let ((_ : s : _) : ls) = dropWhile ((/= "STATEMENT SUMMARY") . _sText . head) as
                      (sm : sd : sy : _ : em : ed : ey : []) = T.splitOn " " (_sText s)
                      startDate = Date (T.decimal sy) 0 0
                  in r-}
@@ -164,10 +192,8 @@ sortNodes (TextBox l1 t1 r1 b1 text1) (TextBox l2 t2 r2 b2 text2) = case compare
 lines' ts = 
     let sorted = sortBy sortNodes ts
         grouped = groupBy (\l r -> _top l == _top r) sorted
-        fmaped = ((\(TextBox l _ _ r t) -> TextSpan l r t) <$>) <$> grouped
+        fmaped = ((\(TextBox l _ _ _ t) -> TextSpan l t) <$>) <$> grouped
     in fmaped
-
-
 
 someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National Bank\\Regular Checking X3203\\Statement Closing 2017-11-17.pdf" ReadMode $ \handle -> do
     pdf <- pdfWithHandle handle
@@ -183,5 +209,5 @@ someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National 
                                 gs <- pageExtractGlyphs p
                                 return $ flattenGlyph <$> gs) kids
     let ls = lines' <$> pageNodes
-    let header = parseHeader (concat ls)
-    return header
+    writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls)
+    return ls
