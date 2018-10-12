@@ -16,6 +16,7 @@ import Money
 import Data.Int
 import Data.List (sortBy, groupBy)
 import Data.Text (Text)
+import Data.Ratio ((%))
 import qualified Data.Text as T
 import qualified Text.Read as R
 import Text.Groom
@@ -33,8 +34,10 @@ data TextSpan = TextSpan { sLeft :: Int
                          , sText :: T.Text
                          } deriving (Show)
 
-data Date = Date !Int16 !Int8 !Int8
-            deriving (Show, Eq, Ord)
+data Date = Date { year :: !Int16
+                 , month :: !Int8
+                 , day :: !Int8
+                 } deriving (Show, Eq, Ord)
 
 newtype Money = Money { unMoney :: Double }
                 deriving (Show)
@@ -98,25 +101,20 @@ validateStatement s
                                    then Right $ balance t
                                    else Left $ "Expected ending balance of " ++ show (a + flattenAmount (amount t)) ++ ", but found " ++ show (balance t)
 
-month :: Integral a => Text -> Maybe a
-month "January" = Just 1
-month "February" = Just 2
-month "March" = Just 3
-month "April" = Just 4
-month "May" = Just 5
-month "June" = Just 6
-month "July" = Just 7
-month "August" = Just 8
-month "September" = Just 9
-month "October" = Just 10
-month "November" = Just 11
-month "December" = Just 12
-month _ = Nothing
-
-x :: Either String Int
-x = do
-    a <- x
-    return a
+getMonth :: Integral a => Text -> Maybe a
+getMonth "January" = Just 1
+getMonth "February" = Just 2
+getMonth "March" = Just 3
+getMonth "April" = Just 4
+getMonth "May" = Just 5
+getMonth "June" = Just 6
+getMonth "July" = Just 7
+getMonth "August" = Just 8
+getMonth "September" = Just 9
+getMonth "October" = Just 10
+getMonth "November" = Just 11
+getMonth "December" = Just 12
+getMonth _ = Nothing
 
 toEither :: Maybe a -> String -> Either String a
 toEither (Just a) _ = Right a
@@ -128,22 +126,27 @@ readMaybe = R.readMaybe . T.unpack
 parseStatementDate :: Text -> Text -> Text -> Either String Date
 parseStatementDate yt mt dt = do
     y <- toEither (readMaybe yt) $ "Could not parse year '" ++ (T.unpack yt) ++ "'"
-    m <- toEither (month mt) $ "Could not parse month '" ++ (T.unpack mt) ++ "'"
+    m <- toEither (getMonth mt) $ "Could not parse month '" ++ (T.unpack mt) ++ "'"
     d <- toEither (readMaybe . T.init $ dt) $ "Could not parse day '" ++ (T.unpack dt) ++ "'"
     return $ Date y m d
 
 readDollars :: Text -> Either String (Dense "USD")
 readDollars t = do
-    d <- toEither (readMaybe t :: Maybe Rational) $ "Could not parse amount '" ++ (T.unpack t) ++ "'"
-    return (dense' d :: Dense "USD") 
+    let ts = T.splitOn "." t
+    if length ts == 2 then pure () else Left $ "Expected dot in amount '" ++ (T.unpack t) ++ "'"
+    let (ds : cs : []) = ts
+    dollars <- toEither (readMaybe (T.filter (/= ',') ds) :: Maybe Integer) $ "Could not parse '" ++ (T.unpack ds) ++ "'"
+    cents <- toEither (readMaybe (T.filter (/= ',') cs) :: Maybe Integer) $ "Cound not parse '" ++ (T.unpack cs) ++ "'"
+    return (dense' (((dollars * 100) + cents) % 100) :: Dense "USD") 
 
 readShortDate :: Text -> (Date, Date) -> Either String Date
 readShortDate t (startDate, endDate) = do
     let ds = T.splitOn "/" t
     if length ds == 2 then pure () else Left $ "Expected date to be in form mm/dd"
-    let (m : d : []) = ds
-    return undefined
-    
+    let (mt : dt : []) = ds
+    m <- toEither (readMaybe mt) $ "Could not parse month '" ++ (T.unpack mt) ++ "'"
+    d <- toEither (readMaybe dt) $ "Could not parse day '" ++ (T.unpack dt) ++ "'"
+    return $ if m == 1 then Date (year endDate) m d else Date (year startDate) m d
 
 parseStatementSummary :: TextSpan -> Either String (Date, Date)
 parseStatementSummary ss = do
@@ -161,15 +164,18 @@ isTableHeader ts = if length ts /= 6
                    else let (TextSpan _ dt : TextSpan _ pd : TextSpan _ ds : TextSpan _ dp : TextSpan _ wd : TextSpan _ db : []) = ts
                         in dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
 
-parseTransaction :: [TextSpan] -> Int -> Either String Transaction
-parseTransaction cs wl = do
-    if length cs == 5 then pure () else Left $ "Expected 5 arguments in row, but found " ++ (show . length $ cs)
-    let (TextSpan _ dt : TextSpan _ pd : TextSpan _ dp : TextSpan l dw : TextSpan _ db : []) = cs
-    dwa <- readDollars dw
+parseTransaction :: [TextSpan] {- line -}
+                 -> (Date, Date) {- statement date range -}
+                 -> Either String Transaction
+parseTransaction cs dr = do
+    if length cs == 6 then pure () else Left $ "Expected 6 arguments in row, but found " ++ (show . length $ cs)
+    let (TextSpan _ dt : TextSpan _ pd : TextSpan _ dp : TextSpan _ de : TextSpan _ wd : TextSpan _ db : []) = cs
+    date <- readShortDate dt dr
+    postDate <- readShortDate pd dr
+    amount <- if wd == " " then Deposit <$> readDollars de else Withdrawal <$> readDollars wd
     dba <- readDollars db
-    {- let amount = if l < wl then Deposit (dense' dw :: Dense "USD") else Withdrawal (dense' dw :: Dense "USD") -}
-    return undefined
-
+    return $ Transaction "asdf" date postDate dp amount dba
+                        
 parseHeader :: [[TextSpan]] -> Either String Header
 parseHeader as = Left "asdf" {- let ((_ : s : _) : ls) = dropWhile ((/= "STATEMENT SUMMARY") . _sText . head) as
                      (sm : sd : sy : _ : em : ed : ey : []) = T.splitOn " " (_sText s)
