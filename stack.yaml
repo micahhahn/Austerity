@@ -34,15 +34,18 @@ resolver: lts-12.10
 #  - auto-update
 #  - wai
 packages:
-- '.'
+- .
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
-extra-deps: [ pdf-toolbox/core/
-            , pdf-toolbox/content/
-            , pdf-toolbox/document/
-            ] 
+extra-deps:
+  - git: https://github.com/micahhahn/pdf-toolbox
+    commit: 8e80347fa6fae8c72102b1f570c1dcfbfe44c04a
+    subdirs: 
+      - core/
+      - content/
+      - document/
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
