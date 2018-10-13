@@ -6,17 +6,16 @@ module Lib
     ) where
 
 import System.IO
+
+import Data.Decimal
 import Pdf.Document
 import Pdf.Document.Internal.Types
 import Pdf.Document.PageNode
 import Pdf.Content.Processor
 
-import Money
-
 import Data.Int
 import Data.List (sortBy, groupBy)
 import Data.Text (Text)
-import Data.Ratio ((%))
 import qualified Data.Text as T
 import qualified Text.Read as R
 import Text.Groom
@@ -37,10 +36,12 @@ data TextSpan = TextSpan { sLeft :: Int
 data Date = Date { year :: !Int16
                  , month :: !Int8
                  , day :: !Int8
-                 } deriving (Show, Eq, Ord)
+                 } deriving (Eq, Ord)
 
-newtype Money = Money { unMoney :: Double }
-                deriving (Show)
+instance Show Date where
+    show (Date y m d) = (show y) ++ "/" ++ (show m) ++ "/" ++ (show d) 
+
+type Money = Decimal
 
 data Statement = Statement 
     { header :: Header
@@ -56,16 +57,16 @@ data Header = Header
     } deriving (Show)
 
 data Summary = Summary
-    { beginningBalance :: Dense "USD"
-    , endingBalance :: Dense "USD"
+    { beginningBalance :: Money
+    , endingBalance :: Money
     , depositsCount :: Int
-    , depositsSum :: Dense "USD"
+    , depositsSum :: Money
     , withdrawalsCount :: Int
-    , withdrawalsSum :: Dense "USD"
+    , withdrawalsSum :: Money
     } deriving (Show)
 
-data Amount = Deposit (Dense "USD")
-            | Withdrawal (Dense "USD")
+data Amount = Deposit Money
+            | Withdrawal Money
             deriving (Show)
 
 data Transaction = Transaction
@@ -74,7 +75,7 @@ data Transaction = Transaction
     , postDate :: Date
     , description :: Text
     , amount :: Amount
-    , balance :: Dense "USD"
+    , balance :: Money
     } deriving (Show)
 
 {- Relatively simple validation to make sure the statement is being processed correctly -}
@@ -82,9 +83,9 @@ validateStatement :: Statement -> Maybe String
 validateStatement s
     | toDate (header s) >= fromDate (header s) = Just $ "fromDate " ++ show (fromDate (header s)) ++ " should be before toDate " ++ show (toDate (header s))
     | depositsCount (summary s) /= length deposits = Just $ "Expected " ++ show (depositsCount (summary s)) ++ " deposits, found " ++ show (length deposits)
-    | depositsSum (summary s) /= foldr (+) (dense' 0.0) deposits = Just $ "Expected " ++ show (depositsSum (summary s)) ++ " of deposits, found " ++ show (foldr (+) (dense' 0.0) deposits) 
+    | depositsSum (summary s) /= foldr (+) 0.0 deposits = Just $ "Expected " ++ show (depositsSum (summary s)) ++ " of deposits, found " ++ show (foldr (+) 0.0 deposits) 
     | withdrawalsCount (summary s) /= length withdrawals = Just $ "Expected " ++ show (withdrawalsCount (summary s)) ++ " withdrawals, found " ++ show (length withdrawals)
-    | withdrawalsSum (summary s) /= foldr (+) (dense' 0.0) withdrawals = Just $ "Expected " ++ show (withdrawalsSum (summary s)) ++ " of withdrawls, found " ++ show (foldr (+) (dense' 0.0) deposits)
+    | withdrawalsSum (summary s) /= foldr (+) 0.0 withdrawals = Just $ "Expected " ++ show (withdrawalsSum (summary s)) ++ " of withdrawls, found " ++ show (foldr (+) 0.0 deposits)
     | endingBalance (summary s) /= (balance . last . transactions) s = Just $ "Expected ending balance of " ++ show (endingBalance (summary s)) ++ " , found " ++ show ((balance . last . transactions) s)
     | otherwise = case foldr mapper (Right $ beginningBalance . summary $ s) (transactions s) of
                        Left s -> Just s
@@ -95,7 +96,7 @@ validateStatement s
           flattenAmount (Deposit x) = x
           flattenAmount (Withdrawal x) = -x
 
-          mapper :: Transaction -> Either String (Dense "USD") -> Either String (Dense "USD")
+          mapper :: Transaction -> Either String Money -> Either String Money
           mapper _ (Left s) = Left s
           mapper t (Right a) = if a + flattenAmount (amount t) == balance t
                                    then Right $ balance t
@@ -130,14 +131,14 @@ parseStatementDate yt mt dt = do
     d <- toEither (readMaybe . T.init $ dt) $ "Could not parse day '" ++ (T.unpack dt) ++ "'"
     return $ Date y m d
 
-readDollars :: Text -> Either String (Dense "USD")
+readDollars :: Text -> Either String Money
 readDollars t = do
     let ts = T.splitOn "." t
     if length ts == 2 then pure () else Left $ "Expected dot in amount '" ++ (T.unpack t) ++ "'"
     let (ds : cs : []) = ts
     dollars <- toEither (readMaybe (T.filter (/= ',') ds) :: Maybe Integer) $ "Could not parse '" ++ (T.unpack ds) ++ "'"
     cents <- toEither (readMaybe (T.filter (/= ',') cs) :: Maybe Integer) $ "Cound not parse '" ++ (T.unpack cs) ++ "'"
-    return (dense' (((dollars * 100) + cents) % 100) :: Dense "USD") 
+    return $ Decimal 2 (dollars * 100 + cents)
 
 readShortDate :: Text -> (Date, Date) -> Either String Date
 readShortDate t (startDate, endDate) = do
@@ -164,18 +165,29 @@ isTableHeader ts = if length ts /= 6
                    else let (TextSpan _ dt : TextSpan _ pd : TextSpan _ ds : TextSpan _ dp : TextSpan _ wd : TextSpan _ db : []) = ts
                         in dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
 
-parseTransaction :: [TextSpan] {- line -}
-                 -> (Date, Date) {- statement date range -}
+safeUnpack2 :: [a] -> Either String (a, a)
+safeUnpack2 (a1 : a2 : []) = Right (a1, a2)
+safeUnpack2 as = Left $ "Expected 2 elements, but found " ++ (show . length $ as)
+
+safeUnpack6 :: [a] -> Either String (a, a, a, a, a, a)
+safeUnpack6 (a1 : a2 : a3 : a4 : a5 : a6 : []) = Right (a1, a2, a3, a4, a5, a6)
+safeUnpack6 as = Left $ "Expected 6 elements , but found '" ++ (show . length $ as)
+
+parseTransaction :: [Text] {- Transaction IDs -}
+                 -> [Text] {- Transaction Details -}
+                 -> (Date, Date) {- Statement Date Range -}
                  -> Either String Transaction
-parseTransaction cs dr = do
-    if length cs == 6 then pure () else Left $ "Expected 6 arguments in row, but found " ++ (show . length $ cs)
-    let (TextSpan _ dt : TextSpan _ pd : TextSpan _ dp : TextSpan _ de : TextSpan _ wd : TextSpan _ db : []) = cs
-    date <- readShortDate dt dr
-    postDate <- readShortDate pd dr
-    amount <- if wd == " " then Deposit <$> readDollars de else Withdrawal <$> readDollars wd
-    dba <- readDollars db
-    return $ Transaction "asdf" date postDate dp amount dba
-                        
+parseTransaction ids dts dr = do
+    (id1, id2) <- safeUnpack2 ids
+    tid <- if id1 == id2 then pure id1 
+                         else Left $ "Expected 2 identical transaction ids, but found '" ++ (T.unpack id1) ++ "' and '" ++ (T.unpack id2) ++ "'"
+    (date, postDate, desc, deposit, withdrawal, balance) <- safeUnpack6 dts
+    date' <- readShortDate date dr
+    postDate' <- readShortDate postDate dr
+    amount' <- if withdrawal == " " then Deposit <$> readDollars deposit else Withdrawal <$> readDollars withdrawal
+    balance' <- readDollars balance
+    return $ Transaction tid date' postDate' desc amount' balance'
+
 parseHeader :: [[TextSpan]] -> Either String Header
 parseHeader as = Left "asdf" {- let ((_ : s : _) : ls) = dropWhile ((/= "STATEMENT SUMMARY") . _sText . head) as
                      (sm : sd : sy : _ : em : ed : ey : []) = T.splitOn " " (_sText s)
@@ -194,11 +206,12 @@ sortNodes (TextBox l1 t1 r1 b1 text1) (TextBox l2 t2 r2 b2 text2) = case compare
     EQ -> compare l1 l2
     LT -> GT
     GT -> LT
-
+    
+lines' :: [TextBox] -> [[Text]]
 lines' ts = 
     let sorted = sortBy sortNodes ts
         grouped = groupBy (\l r -> _top l == _top r) sorted
-        fmaped = ((\(TextBox l _ _ _ t) -> TextSpan l t) <$>) <$> grouped
+        fmaped = ((\(TextBox l _ _ _ t) -> t) <$>) <$> grouped
     in fmaped
 
 someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National Bank\\Regular Checking X3203\\Statement Closing 2017-11-17.pdf" ReadMode $ \handle -> do

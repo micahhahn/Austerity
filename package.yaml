@@ -23,23 +23,11 @@ dependencies:
 - base >= 4.7 && < 5
 - text
 - bytestring
-- io-streams
-- hashable
-- unordered-containers
-- vector
-- scientific
-- base16-bytestring
-- attoparsec
-- containers
-- cipher-rc4
-- cipher-aes
-- cryptohash
-- crypto-api
 - groom
-- safe-money
 - pdf-toolbox-core
 - pdf-toolbox-content
 - pdf-toolbox-document
+- Decimal
 
 library:
   source-dirs: 
