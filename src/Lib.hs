@@ -13,6 +13,7 @@ import Pdf.Document.Internal.Types
 import Pdf.Document.PageNode
 import Pdf.Content.Processor
 
+import Data.Bifunctor
 import Data.Int
 import Data.List (sortBy, groupBy)
 import Data.Text (Text)
@@ -159,19 +160,26 @@ parseStatementSummary ss = do
     ed <- parseStatementDate ey em ed
     return (sd, ed)
 
-isTableHeader :: [TextSpan] -> Bool
-isTableHeader ts = if length ts /= 6 
-                   then False 
-                   else let (TextSpan _ dt : TextSpan _ pd : TextSpan _ ds : TextSpan _ dp : TextSpan _ wd : TextSpan _ db : []) = ts
-                        in dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
+isTableHeader :: [Text] -> Bool
+isTableHeader ts = case safeUnpack6 ts of
+                        Right (dt, pd, ds, dp, wd, db) -> dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
+                        _ -> False
 
 safeUnpack2 :: [a] -> Either String (a, a)
 safeUnpack2 (a1 : a2 : []) = Right (a1, a2)
 safeUnpack2 as = Left $ "Expected 2 elements, but found " ++ (show . length $ as)
 
+safeUnpack4 :: [a] -> Either String (a, a, a, a)
+safeUnpack4 (a1 : a2 : a3 : a4 : []) = Right (a1, a2, a3, a4)
+safeUnpack4 as = Left $ "Expected 4 elements, but found '" ++ (show . length $ as)
+
 safeUnpack6 :: [a] -> Either String (a, a, a, a, a, a)
 safeUnpack6 (a1 : a2 : a3 : a4 : a5 : a6 : []) = Right (a1, a2, a3, a4, a5, a6)
-safeUnpack6 as = Left $ "Expected 6 elements , but found '" ++ (show . length $ as)
+safeUnpack6 as = Left $ "Expected 6 elements, but found '" ++ (show . length $ as)
+
+safeUnpack7 :: [a] -> Either String (a, a, a, a, a, a, a)
+safeUnpack7 (a1 : a2 : a3 : a4 : a5 : a6 : a7 : []) = Right (a1, a2, a3, a4, a5, a6, a7)
+safeUnpack7 as = Left $ "Expected 7 elements, but found '" ++ (show . length $ as)
 
 parseTransaction :: [Text] {- Transaction IDs -}
                  -> [Text] {- Transaction Details -}
@@ -188,11 +196,39 @@ parseTransaction ids dts dr = do
     balance' <- readDollars balance
     return $ Transaction tid date' postDate' desc amount' balance'
 
-parseHeader :: [[TextSpan]] -> Either String Header
-parseHeader as = Left "asdf" {- let ((_ : s : _) : ls) = dropWhile ((/= "STATEMENT SUMMARY") . _sText . head) as
-                     (sm : sd : sy : _ : em : ed : ey : []) = T.splitOn " " (_sText s)
-                     startDate = Date (T.decimal sy) 0 0
-                 in r-}
+isSummaryTableHeader :: [Text] -> Bool
+isSummaryTableHeader ts = case safeUnpack4 ts of
+                               Right (accDesc, accNum, beg, end) -> accDesc == "Account Description" 
+                                                                 && accNum == "Account #" 
+                                                                 && beg == "Beginning" 
+                                                                 && end == "Ending"
+                               Left _ -> False
+
+parseHeader :: [[Text]] -> Either String (Header, [[Text]])
+parseHeader as = do
+    let (l1 : l1s) = as
+    (ss, ds) <- safeUnpack2 l1
+    if ss /= "STATEMENT SUMMARY" then Left "Expected 'STATEMENT SUMMARY'" else pure ()
+    (sm, sd, sy, th, em, ed, ey) <- safeUnpack7 $ T.splitOn " " ds
+    startDate <- parseStatementDate sy sm sd
+    if th /= "through" then Left $ "Unexpected date format '" ++ (T.unpack ds) ++ "'" else pure ()
+    endDate <- parseStatementDate ey em ed
+    let (l2 : l2s) = l1s
+    if isSummaryTableHeader l2 then pure () else Left $ "Unrecognized summary table header '" ++ (show l2) ++ "'"
+    let (l3 : l3s) = l2s
+    let (l4 : l4s) = l3s
+    let (l5 : l5s) = l4s
+    (accDesc, accNum, _, _) <- safeUnpack4 l5
+    return (Header startDate endDate accDesc accNum, l4s)
+
+{- Page 1 should contain both the header and the summary -}
+{- parseDocument :: [[[Text]]] -> Either String a -}
+parseDocument pgs = do
+    (header, p1) <- case pgs of 
+                         (p1 : _) -> let ls = dropWhile ((/= "STATEMENT SUMMARY") . head) p1
+                                     in if length ls == 0 then Left "Could not find 'STATEMENT SUMMARY'" else parseHeader ls
+                         _ -> Left "Expected at least one page"
+    return header
 
 flattenGlyph :: Span -> TextBox
 flattenGlyph (Span gs _) = 
@@ -228,5 +264,5 @@ someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National 
                                 gs <- pageExtractGlyphs p
                                 return $ flattenGlyph <$> gs) kids
     let ls = lines' <$> pageNodes
-    writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls)
-    return ls
+    {- writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls) -}
+    return $ parseDocument ls
