@@ -5,6 +5,7 @@ module Lib
     ( someFunc
     ) where
 
+import Control.Monad
 import System.IO
 
 import Data.Decimal
@@ -40,7 +41,7 @@ data Date = Date { year :: !Int16
                  } deriving (Eq, Ord)
 
 instance Show Date where
-    show (Date y m d) = (show y) ++ "/" ++ (show m) ++ "/" ++ (show d) 
+    show (Date y m d) = (show y) ++ "." ++ (show m) ++ "." ++ (show d) 
 
 type Money = Decimal
 
@@ -134,7 +135,7 @@ parseStatementDate yt mt dt = do
 
 readDollars :: Text -> Either String Money
 readDollars t = do
-    let ts = T.splitOn "." t
+    let ts = T.splitOn "." (T.dropWhile (== '$') t)
     if length ts == 2 then pure () else Left $ "Expected dot in amount '" ++ (T.unpack t) ++ "'"
     let (ds : cs : []) = ts
     dollars <- toEither (readMaybe (T.filter (/= ',') ds) :: Maybe Integer) $ "Could not parse '" ++ (T.unpack ds) ++ "'"
@@ -165,36 +166,29 @@ isTableHeader ts = case safeUnpack6 ts of
                         Right (dt, pd, ds, dp, wd, db) -> dt == "Date" && pd == "Post Date" && ds == "Description" && dp == "Deposits" && wd == "Withdrawals" && db == "Daily Balance"
                         _ -> False
 
-safeUnpack2 :: [a] -> Either String (a, a)
+safeUnpack2 :: (Show a) => [a] -> Either String (a, a)
 safeUnpack2 (a1 : a2 : []) = Right (a1, a2)
-safeUnpack2 as = Left $ "Expected 2 elements, but found " ++ (show . length $ as)
+safeUnpack2 as = Left $ "Expected 2 elements, but found " ++ (show as)
 
-safeUnpack4 :: [a] -> Either String (a, a, a, a)
+safeUnpack3 :: (Show a) => [a] -> Either String (a, a, a)
+safeUnpack3 (a1 : a2 : a3 : []) = Right (a1, a2, a3)
+safeUnpack3 as = Left $ "Expected 3 elements, but found '" ++ (show as)
+
+safeUnpack4 :: (Show a) => [a] -> Either String (a, a, a, a)
 safeUnpack4 (a1 : a2 : a3 : a4 : []) = Right (a1, a2, a3, a4)
-safeUnpack4 as = Left $ "Expected 4 elements, but found '" ++ (show . length $ as)
+safeUnpack4 as = Left $ "Expected 4 elements, but found '" ++ (show as)
 
-safeUnpack6 :: [a] -> Either String (a, a, a, a, a, a)
+safeUnpack5 :: (Show a) => [a] -> Either String (a, a, a, a, a)
+safeUnpack5 (a1 : a2 : a3 : a4 : a5 : []) = Right (a1, a2, a3, a4, a5)
+safeUnpack5 as = Left $ "Expected 5 elements, but found '" ++ (show as)
+
+safeUnpack6 :: (Show a) => [a] -> Either String (a, a, a, a, a, a)
 safeUnpack6 (a1 : a2 : a3 : a4 : a5 : a6 : []) = Right (a1, a2, a3, a4, a5, a6)
-safeUnpack6 as = Left $ "Expected 6 elements, but found '" ++ (show . length $ as)
+safeUnpack6 as = Left $ "Expected 6 elements, but found '" ++ (show as)
 
-safeUnpack7 :: [a] -> Either String (a, a, a, a, a, a, a)
+safeUnpack7 :: (Show a) => [a] -> Either String (a, a, a, a, a, a, a)
 safeUnpack7 (a1 : a2 : a3 : a4 : a5 : a6 : a7 : []) = Right (a1, a2, a3, a4, a5, a6, a7)
-safeUnpack7 as = Left $ "Expected 7 elements, but found '" ++ (show . length $ as)
-
-parseTransaction :: [Text] {- Transaction IDs -}
-                 -> [Text] {- Transaction Details -}
-                 -> (Date, Date) {- Statement Date Range -}
-                 -> Either String Transaction
-parseTransaction ids dts dr = do
-    (id1, id2) <- safeUnpack2 ids
-    tid <- if id1 == id2 then pure id1 
-                         else Left $ "Expected 2 identical transaction ids, but found '" ++ (T.unpack id1) ++ "' and '" ++ (T.unpack id2) ++ "'"
-    (date, postDate, desc, deposit, withdrawal, balance) <- safeUnpack6 dts
-    date' <- readShortDate date dr
-    postDate' <- readShortDate postDate dr
-    amount' <- if withdrawal == " " then Deposit <$> readDollars deposit else Withdrawal <$> readDollars withdrawal
-    balance' <- readDollars balance
-    return $ Transaction tid date' postDate' desc amount' balance'
+safeUnpack7 as = Left $ "Expected 7 elements, but found '" ++ (show as)
 
 isSummaryTableHeader :: [Text] -> Bool
 isSummaryTableHeader ts = case safeUnpack4 ts of
@@ -221,14 +215,86 @@ parseHeader as = do
     (accDesc, accNum, _, _) <- safeUnpack4 l5
     return (Header startDate endDate accDesc accNum, l4s)
 
-{- Page 1 should contain both the header and the summary -}
-{- parseDocument :: [[[Text]]] -> Either String a -}
+parseTotal :: Text {- Label to match -}
+           -> [Text]
+           -> Either String (Int, Money)
+parseTotal label ts = do
+    (label, value) <- safeUnpack2 ts
+    if label == label then pure () else Left $ "Expected first item to be '" ++ (T.unpack label) ++ "'"
+    (count, for, sum) <- safeUnpack3 (T.splitOn " " value)
+    depositCount' <- toEither (readMaybe count :: Maybe Int) $ "Expected '" ++ (T.unpack label) ++ " count' to be an integer"
+    if for == "for" then pure () else Left $ "Expected 'for'"
+    sumCount' <- readDollars sum
+    return (depositCount', sumCount')
+
+parseSummary :: [[Text]] -> Either String (Summary, [[Text]])
+parseSummary ts = do
+    let (l1 : l1s) = ts
+    if last l1 == "Account Detail" then pure () else Left $ "Expected line to contain 'Account Detail'"
+    let (l2 : l2s) = l1s
+    beginningBalance <- first ("While parsing beginning balance: " ++) $ do
+        (balanceLabel, balance, _, _) <- safeUnpack4 l2
+        if balanceLabel == "Beginning Balance" then pure () else Left $ "Expected first item to be 'Beginning Balance'"
+        readDollars balance
+    let (l3 : l3s) = l2s
+    (depositCount', depositSum') <- first ("While parsing total deposits: " ++) (parseTotal "Total Deposits" l3)
+    let (l4 : l4s) = l3s
+    (withdrawalCount', withdrawalSum') <- first ("While parsing total withdrawals: " ++) (parseTotal "Total Withdrawals" l4)
+    let (l5 : l5s) = l4s
+    endingBalance <- first ("While parsing ending balance: " ++) $ do
+        (label, balance) <- safeUnpack2 l5
+        if label == "Ending Balance" then pure () else Left $ "Expected first item to be 'Ending Balance'"
+        readDollars balance
+    return (Summary beginningBalance endingBalance depositCount' depositSum' withdrawalCount' withdrawalSum', l5s)
+
+parseTransaction :: [Text] {- Transaction IDs -}
+                 -> [Text] {- Transaction Details -}
+                 -> (Date, Date) {- Statement Date Range -}
+                 -> Either String Transaction
+parseTransaction ids dts dr = do
+    (id1, id2) <- safeUnpack2 ids
+    tid <- if id1 == id2 then pure id1 
+                         else Left $ "Expected 2 identical transaction ids, but found '" ++ (T.unpack id1) ++ "' and '" ++ (T.unpack id2) ++ "'"
+    (date, postDate, desc, deposit, withdrawal, balance) <- safeUnpack6 dts
+    date' <- readShortDate date dr
+    postDate' <- readShortDate postDate dr
+    amount' <- if withdrawal == " " then Deposit <$> readDollars deposit else Withdrawal <$> readDollars withdrawal
+    balance' <- readDollars balance
+    return $ Transaction tid date' postDate' desc amount' balance'
+
+stripTransaction :: (Date, Date) -> [[Text]] -> Either String (Transaction, [[Text]])
+stripTransaction dr ts = do
+    let (dts : ids : tss) = if length (head ts) == 1 then tail ts else ts
+    t <- parseTransaction ids dts dr 
+    return (t, tss)
+
+parseAll :: (Date, Date) -> [[Text]] -> Either String [Transaction]
+parseAll dr ts = if length ts > 1 && (head . head $ ts) /= "MONTHLY USAGE SUMMARY"
+                 then do 
+                    (t, tss) <- stripTransaction dr ts
+                    (t:) <$> parseAll dr tss
+                 else return []
+
+parseTransactions :: (Date, Date) -> [[Text]] -> Either String [Transaction]
+parseTransactions dr ts = do
+    let table = dropWhile (not . isTableHeader) ts
+    if length table == 0 
+        then return []
+        else do
+            let rows = tail table
+            let row1 = if (head . head $ rows) == "Beginning Balance" then tail rows else rows
+            parseAll dr row1
+
+parseDocument :: [[[Text]]] -> Either String Statement
 parseDocument pgs = do
     (header, p1) <- case pgs of 
                          (p1 : _) -> let ls = dropWhile ((/= "STATEMENT SUMMARY") . head) p1
                                      in if length ls == 0 then Left "Could not find 'STATEMENT SUMMARY'" else parseHeader ls
                          _ -> Left "Expected at least one page"
-    return header
+    let p1' = dropWhile ((/= "Account Detail") . last) p1
+    (summary, p1'') <- parseSummary p1' 
+    ts <- sequence $ parseTransactions (fromDate header, toDate header) <$> pgs
+    return $ Statement header summary (concat ts)
 
 flattenGlyph :: Span -> TextBox
 flattenGlyph (Span gs _) = 
@@ -263,6 +329,6 @@ someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National 
                             PageTreeLeaf p -> do
                                 gs <- pageExtractGlyphs p
                                 return $ flattenGlyph <$> gs) kids
-    let ls = lines' <$> pageNodes
-    {- writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls) -}
-    return $ parseDocument ls
+    let ls = parseDocument $ lines' <$> pageNodes
+    writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls)
+    return ls
