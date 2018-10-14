@@ -83,13 +83,13 @@ data Transaction = Transaction
 {- Relatively simple validation to make sure the statement is being processed correctly -}
 validateStatement :: Statement -> Maybe String
 validateStatement s
-    | toDate (header s) >= fromDate (header s) = Just $ "fromDate " ++ show (fromDate (header s)) ++ " should be before toDate " ++ show (toDate (header s))
+    | fromDate (header s) >= toDate (header s) = Just $ "fromDate " ++ show (fromDate (header s)) ++ " should be before toDate " ++ show (toDate (header s))
     | depositsCount (summary s) /= length deposits = Just $ "Expected " ++ show (depositsCount (summary s)) ++ " deposits, found " ++ show (length deposits)
     | depositsSum (summary s) /= foldr (+) 0.0 deposits = Just $ "Expected " ++ show (depositsSum (summary s)) ++ " of deposits, found " ++ show (foldr (+) 0.0 deposits) 
     | withdrawalsCount (summary s) /= length withdrawals = Just $ "Expected " ++ show (withdrawalsCount (summary s)) ++ " withdrawals, found " ++ show (length withdrawals)
     | withdrawalsSum (summary s) /= foldr (+) 0.0 withdrawals = Just $ "Expected " ++ show (withdrawalsSum (summary s)) ++ " of withdrawls, found " ++ show (foldr (+) 0.0 deposits)
     | endingBalance (summary s) /= (balance . last . transactions) s = Just $ "Expected ending balance of " ++ show (endingBalance (summary s)) ++ " , found " ++ show ((balance . last . transactions) s)
-    | otherwise = case foldr mapper (Right $ beginningBalance . summary $ s) (transactions s) of
+    | otherwise = case foldl (flip mapper) (Right $ beginningBalance . summary $ s) (transactions s) of
                        Left s -> Just s
                        _ -> Nothing
     where deposits = [ x | (Deposit x) <- amount <$> transactions s]
@@ -102,7 +102,7 @@ validateStatement s
           mapper _ (Left s) = Left s
           mapper t (Right a) = if a + flattenAmount (amount t) == balance t
                                    then Right $ balance t
-                                   else Left $ "Expected ending balance of " ++ show (a + flattenAmount (amount t)) ++ ", but found " ++ show (balance t)
+                                   else Left $ "In transaction '" ++ (show t) ++ "': Expected ending balance of " ++ show (a + flattenAmount (amount t)) ++ ", but found " ++ show (balance t)
 
 getMonth :: Integral a => Text -> Maybe a
 getMonth "January" = Just 1
