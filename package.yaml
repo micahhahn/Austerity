@@ -28,6 +28,7 @@ dependencies:
 - pdf-toolbox-content
 - pdf-toolbox-document
 - Decimal
+- directory
 
 library:
   source-dirs: 

@@ -7,6 +7,9 @@ module Lib
 
 import Control.Monad
 import System.IO
+import System.Directory
+
+import Debug.Trace
 
 import Data.Decimal
 import Pdf.Document
@@ -24,16 +27,19 @@ import Text.Groom
 import Data.Maybe (catMaybes)
 import Pdf.Content.Transform as V
 
-data TextBox = TextBox { _left :: Int
-                       , _top :: Int
-                       , _bottom :: Int
-                       , _right :: Int
+data TextBox = TextBox { _left :: Double
+                       , _top :: Double
+                       , _bottom :: Double
+                       , _lineHeight :: Double
                        , _text :: T.Text
+                       , _font :: Name
                        } deriving (Show)
 
-data TextSpan = TextSpan { sLeft :: Int 
-                         , sText :: T.Text
-                         } deriving (Show)
+data TextGroup = TextGroup { gLeft :: Double 
+                           , gTop :: Double
+                           , gBottom :: Double
+                           , gTexts :: [T.Text]
+                           } deriving (Show)
 
 data Date = Date { year :: !Int16
                  , month :: !Int8
@@ -151,7 +157,7 @@ readShortDate t (startDate, endDate) = do
     d <- toEither (readMaybe dt) $ "Could not parse day '" ++ (T.unpack dt) ++ "'"
     return $ if m == 1 then Date (year endDate) m d else Date (year startDate) m d
 
-parseStatementSummary :: TextSpan -> Either String (Date, Date)
+{-parseStatementSummary :: TextSpan -> Either String (Date, Date)
 parseStatementSummary ss = do
     let ts = T.splitOn " " (sText ss)
     if length ts == 7 then pure () else Left $ "Unexpected number of arguments in statement summary header '" ++ (T.unpack . sText $ ss) ++ "'"
@@ -159,7 +165,7 @@ parseStatementSummary ss = do
     if th == "through" then pure () else Left $ "Unexpected '" ++ (T.unpack th) ++ "' in statement summary header '" ++ (T.unpack . sText $ ss) ++ "'"
     sd <- parseStatementDate sy sm sd
     ed <- parseStatementDate ey em ed
-    return (sd, ed)
+    return (sd, ed) -}
 
 isTableHeader :: [Text] -> Bool
 isTableHeader ts = case safeUnpack6 ts of
@@ -167,27 +173,27 @@ isTableHeader ts = case safeUnpack6 ts of
                         _ -> False
 
 safeUnpack2 :: (Show a) => [a] -> Either String (a, a)
-safeUnpack2 (a1 : a2 : []) = Right (a1, a2)
+safeUnpack2 (a1 : a2 : _) = Right (a1, a2)
 safeUnpack2 as = Left $ "Expected 2 elements, but found " ++ (show as)
 
 safeUnpack3 :: (Show a) => [a] -> Either String (a, a, a)
-safeUnpack3 (a1 : a2 : a3 : []) = Right (a1, a2, a3)
+safeUnpack3 (a1 : a2 : a3 : _) = Right (a1, a2, a3)
 safeUnpack3 as = Left $ "Expected 3 elements, but found '" ++ (show as)
 
 safeUnpack4 :: (Show a) => [a] -> Either String (a, a, a, a)
-safeUnpack4 (a1 : a2 : a3 : a4 : []) = Right (a1, a2, a3, a4)
+safeUnpack4 (a1 : a2 : a3 : a4 : _) = Right (a1, a2, a3, a4)
 safeUnpack4 as = Left $ "Expected 4 elements, but found '" ++ (show as)
 
 safeUnpack5 :: (Show a) => [a] -> Either String (a, a, a, a, a)
-safeUnpack5 (a1 : a2 : a3 : a4 : a5 : []) = Right (a1, a2, a3, a4, a5)
+safeUnpack5 (a1 : a2 : a3 : a4 : a5 : _) = Right (a1, a2, a3, a4, a5)
 safeUnpack5 as = Left $ "Expected 5 elements, but found '" ++ (show as)
 
 safeUnpack6 :: (Show a) => [a] -> Either String (a, a, a, a, a, a)
-safeUnpack6 (a1 : a2 : a3 : a4 : a5 : a6 : []) = Right (a1, a2, a3, a4, a5, a6)
+safeUnpack6 (a1 : a2 : a3 : a4 : a5 : a6 : _) = Right (a1, a2, a3, a4, a5, a6)
 safeUnpack6 as = Left $ "Expected 6 elements, but found '" ++ (show as)
 
 safeUnpack7 :: (Show a) => [a] -> Either String (a, a, a, a, a, a, a)
-safeUnpack7 (a1 : a2 : a3 : a4 : a5 : a6 : a7 : []) = Right (a1, a2, a3, a4, a5, a6, a7)
+safeUnpack7 (a1 : a2 : a3 : a4 : a5 : a6 : a7 : _) = Right (a1, a2, a3, a4, a5, a6, a7)
 safeUnpack7 as = Left $ "Expected 7 elements, but found '" ++ (show as)
 
 isSummaryTableHeader :: [Text] -> Bool
@@ -198,7 +204,7 @@ isSummaryTableHeader ts = case safeUnpack4 ts of
                                                                  && end == "Ending"
                                Left _ -> False
 
-parseHeader :: [[Text]] -> Either String (Header, [[Text]])
+parseHeader :: [[Text]] -> Either String Header
 parseHeader as = do
     let (l1 : l1s) = as
     (ss, ds) <- safeUnpack2 l1
@@ -213,7 +219,7 @@ parseHeader as = do
     let (l4 : l4s) = l3s
     let (l5 : l5s) = l4s
     (accDesc, accNum, _, _) <- safeUnpack4 l5
-    return (Header startDate endDate accDesc accNum, l4s)
+    return $ Header startDate endDate accDesc accNum
 
 parseTotal :: Text {- Label to match -}
            -> [Text]
@@ -227,7 +233,7 @@ parseTotal label ts = do
     sumCount' <- readDollars sum
     return (depositCount', sumCount')
 
-parseSummary :: [[Text]] -> Either String (Summary, [[Text]])
+parseSummary :: [[Text]] -> Either String Summary
 parseSummary ts = do
     let (l1 : l1s) = ts
     if last l1 == "Account Detail" then pure () else Left $ "Expected line to contain 'Account Detail'"
@@ -245,7 +251,7 @@ parseSummary ts = do
         (label, balance) <- safeUnpack2 l5
         if label == "Ending Balance" then pure () else Left $ "Expected first item to be 'Ending Balance'"
         readDollars balance
-    return (Summary beginningBalance endingBalance depositCount' depositSum' withdrawalCount' withdrawalSum', l5s)
+    return $ Summary beginningBalance endingBalance depositCount' depositSum' withdrawalCount' withdrawalSum'
 
 parseTransaction :: [Text] {- Transaction IDs -}
                  -> [Text] {- Transaction Details -}
@@ -268,12 +274,13 @@ stripTransaction dr ts = do
     t <- parseTransaction ids dts dr 
     return (t, tss)
 
-parseAll :: (Date, Date) -> [[Text]] -> Either String [Transaction]
-parseAll dr ts = if length ts > 1 && (head . head $ ts) /= "MONTHLY USAGE SUMMARY"
+parseAll :: (Date, Date) -> [[Text]] -> Either String ([Transaction], [[Text]])
+parseAll dr ts = if length ts > 1 && (head . head $ ts) /= "MONTHLY USAGE SUMMARY" && (head . (!! 1) $ ts) /= "MONTHLY USAGE SUMMARY"
+                                  && not (T.isPrefixOf "Page" (head . head $ ts)) && not (T.isPrefixOf "Page" (head . (!! 1) $ ts))
                  then do 
                     (t, tss) <- stripTransaction dr ts
-                    (t:) <$> parseAll dr tss
-                 else return []
+                    (\(ts, rs) -> (t:ts, rs)) <$> parseAll dr tss
+                 else return ([], ts)
 
 parseTransactions :: (Date, Date) -> [[Text]] -> Either String [Transaction]
 parseTransactions dr ts = do
@@ -283,40 +290,84 @@ parseTransactions dr ts = do
         else do
             let rows = tail table
             let row1 = if (head . head $ rows) == "Beginning Balance" then tail rows else rows
-            parseAll dr row1
+            (trans, rs) <- parseAll dr row1
+            (trans ++) <$> parseTransactions dr rs 
 
-parseDocument :: [[[Text]]] -> Either String Statement
+parseDocument :: [[Text]] -> Either String Statement
 parseDocument pgs = do
-    (header, p1) <- case pgs of 
-                         (p1 : _) -> let ls = dropWhile ((/= "STATEMENT SUMMARY") . head) p1
-                                     in if length ls == 0 then Left "Could not find 'STATEMENT SUMMARY'" else parseHeader ls
-                         _ -> Left "Expected at least one page"
-    let p1' = dropWhile ((/= "Account Detail") . last) p1
-    (summary, p1'') <- parseSummary p1' 
-    ts <- sequence $ parseTransactions (fromDate header, toDate header) <$> pgs
-    return $ Statement header summary (concat ts)
+    header <- let ls = dropWhile ((/= "STATEMENT SUMMARY") . head) pgs
+              in if length ls == 0 then Left "Could not find 'STATEMENT SUMMARY'" else parseHeader ls
+    summary <- let ls = dropWhile ((/= "Account Detail") . last) pgs
+               in if length ls == 0 then Left $ "Could not find 'Account Detail'" else parseSummary ls
+    ts <- parseTransactions (fromDate header, toDate header) pgs
+    return $ Statement header summary ts
 
 flattenGlyph :: Span -> TextBox
-flattenGlyph (Span gs _) = 
-    let (Vector left top) = (glyphTopLeft . head) gs
-        (Vector right bottom) = (glyphBottomRight . last) gs
+flattenGlyph (Span gs x) = 
+    let (Vector left bottom) = (glyphTopLeft . head) gs
+        (Vector right top) = (glyphBottomRight . last) gs
         text = T.concat . catMaybes $ glyphText <$> gs
-    in TextBox (floor left) (floor top) (floor bottom) (floor right) text
- 
-sortNodes :: TextBox -> TextBox -> Ordering
-sortNodes (TextBox l1 t1 r1 b1 text1) (TextBox l2 t2 r2 b2 text2) = case compare t1 t2 of
-    EQ -> compare l1 l2
-    LT -> GT
-    GT -> LT
+    in TextBox left top bottom (top - bottom) text x
     
-lines' :: [TextBox] -> [[Text]]
+sortByLeftThenTop :: TextBox -> TextBox -> Ordering
+sortByLeftThenTop (TextBox l1 t1 _ _ _ _) (TextBox l2 t2 _ _ _ _) = case compare l1 l2 of
+    EQ -> case compare t1 t2 of
+        EQ -> EQ
+        LT -> GT
+        GT -> LT
+    LT -> LT
+    GT -> GT
+
+collapseLines :: [TextBox] -> TextBox -> [TextBox]
+collapseLines (tl : ts) tr = if _left tl == _left tr 
+                                && _lineHeight tl == _lineHeight tr
+                                && _font tl == _font tr
+                                && _bottom tl - _top tr <= 1.4
+                             then TextBox { _left = _left tl
+                                          , _top = _top tl
+                                          , _bottom = _bottom tr
+                                          , _lineHeight = _lineHeight tl
+                                          , _text = if _text tl == _text tr 
+                                                    then _text tl 
+                                                    else _text tl <> " " <> _text tr
+                                          , _font = _font tl
+                                          } : ts
+                             else tr : tl : ts
+
+removeInvisibles :: [TextBox] -> [TextBox]
+removeInvisibles = filter $ (> 1.0) . _lineHeight
+
+groupMultilines :: [TextBox] -> [TextBox]
+groupMultilines ts =
+    let sorted = sortBy sortByLeftThenTop ts
+        folded = foldl collapseLines [head sorted] (tail sorted)
+    in folded
+
+compareTops :: TextBox -> TextBox -> Ordering
+compareTops l r = case abs (_top l - _top r) / _lineHeight l <= 0.1 of
+    True -> EQ
+    False -> if _top l < _top r then GT else LT
+
+lines' :: [TextBox] -> [TextGroup]
 lines' ts = 
     let sorted = sortBy sortNodes ts
-        grouped = groupBy (\l r -> _top l == _top r) sorted
-        fmaped = ((\(TextBox l _ _ _ t) -> t) <$>) <$> grouped
-    in fmaped
+        grouped = groupBy (\l r -> compareTops l r == EQ) sorted
+        fmapped = (\tbs -> TextGroup (_left . head $ tbs) (_top . head $ tbs) (_bottom . head $ tbs) (_text <$> tbs)) <$> grouped
+    in fmapped
 
-someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National Bank\\Regular Checking X3203\\Statement Closing 2017-11-17.pdf" ReadMode $ \handle -> do
+sortNodes :: TextBox -> TextBox -> Ordering
+sortNodes l r = case compareTops l r of
+    EQ -> compare (_left l) (_left r)
+    x -> x
+
+getAllStatements :: IO (Either String [Statement])
+getAllStatements = do
+    let directory = "C:\\Users\\micah\\Dropbox\\Financial\\First National Bank\\Regular Checking X3203\\"
+    paths <- listDirectory directory
+    sequence <$> mapM someFunc ((directory ++) <$> paths)
+
+someFunc :: FilePath -> IO (Either String Statement)
+someFunc path = withBinaryFile path ReadMode $ \handle -> do
     pdf <- pdfWithHandle handle
     doc <- document pdf
     catalog <- documentCatalog doc
@@ -328,7 +379,10 @@ someFunc = withBinaryFile "C:\\Users\\micah\\Dropbox\\Financial\\First National 
                             PageTreeNode (PageNode _ _ d) -> return undefined
                             PageTreeLeaf p -> do
                                 gs <- pageExtractGlyphs p
-                                return $ flattenGlyph <$> gs) kids
-    let ls = parseDocument $ lines' <$> pageNodes
-    writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom ls)
-    return ls
+                                return $ lines' . groupMultilines . removeInvisibles $ flattenGlyph <$> gs) kids
+    {-let lines = concat $ lines' <$> pageNodes
+    let ls = first (("While parsing document '" ++ path ++ "': ") ++) $ parseDocument lines -}
+    writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom pageNodes)
+    return undefined
+
+r = someFunc "C:\\Users\\micah\\Dropbox\\Financial\\First National Bank\\Regular Checking X3203\\Statement Closing 2017-09-18.pdf"
