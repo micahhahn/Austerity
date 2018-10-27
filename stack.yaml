@@ -48,6 +48,7 @@ extra-deps:
       - document/
   - git: https://github.com/micahhahn/Haskell-Decimal
     commit: e6e3f5edac45534c98beede2d21acac5eff889d7
+  - servant-multipart-0.11.2
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

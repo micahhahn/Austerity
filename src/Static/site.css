@@ -1,0 +1,9 @@
+.page {
+    margin: 25px;
+    border: 1px solid #000000;
+    position: relative;
+}
+
+.textbox {
+    position: absolute;
+}

@@ -29,6 +29,13 @@ dependencies:
 - pdf-toolbox-document
 - Decimal
 - directory
+- servant
+- servant-server
+- servant-lucid
+- servant-multipart
+- lucid
+- wai
+- warp
 
 library:
   source-dirs: 
