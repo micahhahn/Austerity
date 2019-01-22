@@ -8,14 +8,20 @@ module Pdf (
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Text.Encoding
 import Data.Maybe (catMaybes)
 import System.IO
 
+import Pdf.Core.Name
 import Pdf.Document
 import Pdf.Document.Internal.Types
 import Pdf.Document.PageNode
 import Pdf.Content.Processor
 import Pdf.Content.Transform
+
+import Text.Groom
+
+import Debug.Trace
 
 {- Uses pdf-toolbox to extract all text from a pdf file -}
 
@@ -43,11 +49,11 @@ scaleTextPage :: Double -> TextPage -> TextPage
 scaleTextPage s (TextPage b bs) = TextPage (scaleRect s b) (scaleTextBox s <$> bs)
 
 flattenGlyph :: Span -> TextBox
-flattenGlyph (Span gs x) = 
+flattenGlyph (Span gs _) = 
     let (Vector l t) = (glyphTopLeft . head) gs
         (Vector r b) = (glyphBottomRight . last) gs
         text = Text.concat . catMaybes $ glyphText <$> gs
-    in TextBox (Rect l t 0 (b - t)) text
+    in TextBox (Rect l t (r - l) (b - t)) text
 
 extractText :: FilePath -> IO [TextPage]
 extractText fp = withBinaryFile fp ReadMode $ \handle -> do
@@ -64,3 +70,22 @@ extractText fp = withBinaryFile fp ReadMode $ \handle -> do
                         gs <- pageExtractGlyphs p
                         (Rectangle l t w h) <- pageMediaBox p
                         return $ TextPage (Rect l t w h) $ flattenGlyph <$> gs) kids
+
+extractText' :: FilePath -> IO [[Glyph]]
+extractText' fp = withBinaryFile fp ReadMode $ \handle -> do
+    pdf <- pdfWithHandle handle
+    doc <- document pdf
+    catalog <- documentCatalog doc
+    rootNode <- catalogPageNode catalog
+    kids <- pageNodeKids rootNode
+    mapM (\ref -> do
+                pn <- loadPageNode pdf ref 
+                case pn of 
+                    PageTreeNode (PageNode _ _ d) -> return undefined
+                    PageTreeLeaf p -> do
+                        gs <- pageExtractGlyphs p
+                        (Rectangle l t w h) <- pageMediaBox p
+                        return . concat $ (\(Span gs _) -> gs) <$> gs) kids
+
+r :: IO [[Glyph]]
+r = extractText' "C:/Users/Micah/Desktop/2017_LAWA_CAFR.pdf"

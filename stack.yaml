@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-12.10
+resolver: lts-12.9
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,14 +41,22 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
   - git: https://github.com/micahhahn/pdf-toolbox
-    commit: 8e80347fa6fae8c72102b1f570c1dcfbfe44c04a
+    commit: 26ee91a6f4dfe7b82bc3a7aed2cc96f4388ed273
     subdirs: 
       - core/
       - content/
       - document/
   - git: https://github.com/micahhahn/Haskell-Decimal
     commit: e6e3f5edac45534c98beede2d21acac5eff889d7
-  - servant-multipart-0.11.2
+  - git: https://github.com/micahhahn/haskell-opaleye
+    commit: e2c9de884717475834ec32ea155c21c39fc68017
+  # - git: https://github.com/tathougies/beam
+  #   commit: a65739e77e485c5695a8591b2b231a85ccd6a3ab
+  #   subdirs:
+  #     - beam-core/
+  #     - beam-sqlite/
+  - ../beam/beam-core/
+  - ../beam/beam-sqlite/
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

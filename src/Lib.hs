@@ -379,7 +379,7 @@ someFunc path = withBinaryFile path ReadMode $ \handle -> do
                             PageTreeNode (PageNode _ _ d) -> return undefined
                             PageTreeLeaf p -> do
                                 gs <- pageExtractGlyphs p
-                                return $ lines' . groupMultilines . removeInvisibles $ flattenGlyph <$> gs) kids
+                                return $ {- lines' . groupMultilines . removeInvisibles $ flattenGlyph -} (\(Span g _) -> g) <$> gs) kids
     {-let lines = concat $ lines' <$> pageNodes
     let ls = first (("While parsing document '" ++ path ++ "': ") ++) $ parseDocument lines -}
     writeFile "C:\\Users\\micah\\Desktop\\Pdf.txt" (groom pageNodes)

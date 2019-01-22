@@ -1,25 +1,51 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Main where
 
 import Control.Monad.IO.Class
 import Data.ByteString.Lazy as L
+import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Proxy
 import Lucid
 import Network.Wai.Handler.Warp
 import Servant
 import Servant.HTML.Lucid
-import Servant.Multipart
 
-import Debug.Trace
+import GHC.Generics
+
+import qualified Beam as Beam
+import qualified Database.Beam as B
+import qualified Database.Beam.Sqlite as BS
+import qualified Database.SQLite.Simple as SS
+
+import Data.Time
+
+import Data.Functor.Identity
+import Data.Functor.Const
+
+import Web.FormUrlEncoded
+
+import Pdf.Content.Processor
+
+import qualified Data.ByteString as BS
 
 import Pdf
 
-type AusterityApi = "home" :> Get '[HTML] (Html ())
-               :<|> "import" :> MultipartForm Tmp (MultipartData Tmp) :> Post '[HTML] (Html ())
+type AusterityHome = "home" :> Get '[HTML] (Html ())
+type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
+type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] Form :> Post '[HTML] (Html ())
+
+type AusterityApi = AusterityHome
+               :<|> AusterityReceiptsNewGet
+               :<|> AusterityReceiptsNewPost
                :<|> "static" :> Raw
 
 home :: Html ()
@@ -34,11 +60,72 @@ home = do
                     input_ [type_ "file", name_ "file"]
                     input_ [type_ "submit", value_ "Import"]
 
-doubleText = Text.pack . show . floor
+defaultFullReceiptError :: FullReceiptError
+defaultFullReceiptError = FullReceipt' 
+    { date = Const ("", Nothing)
+    , vendor = Const ("", Nothing)
+    , amount = Const ("", Nothing)
+    }
+
+newReceipt :: SS.Connection -> Handler (Html ())
+newReceipt conn = do
+    vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
+    return $ do
+        doctypehtml_ $ do
+            html_ $ do
+                head_ $ do
+                    title_ "Austerity"
+                body_ $ do
+                    p_ "Create new Receipt"
+                    fullReceiptForm defaultFullReceiptError vendors
+
+fullReceiptForm :: FullReceiptError -> [Beam.Vendor] -> Html ()
+fullReceiptForm receipt vendors = do
+    form_ [action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
+        table_ $ do
+            tr_ $ do
+                td_ $ label_ "Date:"
+                td_ $ input_ [type_ "text", name_ "date", value_ (fst . getConst . date $ receipt)]
+            tr_ $ do
+                td_ $ label_ "Vendor:"
+                td_ $ select_ [name_ "vendor"] $ do
+                    mapM_ (\v -> option_ [value_ (Text.pack . show $ Beam._vendor_VendorId v)] (toHtml $ Beam._vendor_Name v)) vendors
+            tr_ $ do
+                td_ $ label_ "Amount:"
+                td_ $ input_ [type_ "text", name_ "amount", value_ (fst . getConst . amount $ receipt)]
+            tr_ $ do
+                td_ $ input_ [type_ "submit", value_ "Create"]
+
+newReceiptPost :: SS.Connection -> Form -> Handler (Html ())
+newReceiptPost conn r = do
+    return $ p_ [] (toHtml . show $ r)
+
+data FullReceipt' a = FullReceipt'
+    { date :: a LocalTime
+    , vendor :: a Int
+    , amount :: a Double
+    } deriving (Generic)
+
+type FullReceipt = FullReceipt' Identity
+deriving instance Show FullReceipt
+
+{- The type to be marshalled from the body of an HTTP request -}
+type FullReceiptForm = FullReceipt' (Const Text)
+deriving instance Show FullReceiptForm
+deriving instance FromForm FullReceiptForm
+
+{-  -}
+type FullReceiptError = FullReceipt' (Const (Text, Maybe Text))
+deriving instance Show FullReceiptError 
+
+instance (FromHttpApiData a) => FromHttpApiData (Const a b) where
+    parseUrlPiece t = Const <$> parseUrlPiece t
+
+doubleText = Text.pack . show
 
 renderTextBox :: Double -> TextBox -> Html ()
-renderTextBox pageHeight (TextBox (Rect l t _ h) text) = do
-    span_ [class_ "textbox", style_ ("left: " <> doubleText l <> "px; top: " <> doubleText (pageHeight - t) <> "px; font-size: " <> doubleText h <> "px;")] (toHtml text)
+renderTextBox pageHeight (TextBox (Rect l t w h) text) = do
+    div_ [class_ "textbox", style_ ("left: " <> doubleText l <> "px; top: " <> doubleText (pageHeight - t) <> "px; font-size: " <> doubleText h <> "px; width: " <> doubleText w <> "px; height: " <> doubleText h <> "px;")] (toHtml text)
 
 renderPage :: TextPage -> Html ()
 renderPage (TextPage (Rect _ _ width height) bs) = do
@@ -48,7 +135,7 @@ renderPage (TextPage (Rect _ _ width height) bs) = do
 renderPdf :: [TextPage] -> Html ()
 renderPdf ps =  mapM_ renderPage ps
 
-import' :: MultipartData Tmp -> Handler (Html ())
+{-import' :: MultipartData Tmp -> Handler (Html ())
 import' md = do
     pdfs <- case lookupFile "file" md of
             Just f -> do
@@ -63,11 +150,15 @@ import' md = do
                         link_ [type_ "text/css", rel_ "stylesheet", href_ "static/site.css"]
                 body_ $ do
                     pdfs
+-}
 
-server :: Server AusterityApi
-server = return home
-    :<|> import'
+server :: SS.Connection -> Server AusterityApi
+server conn = return home
+    :<|> newReceipt conn
+    :<|> newReceiptPost conn 
     :<|> serveDirectoryFileServer "C:\\Users\\micah\\Source\\Austerity\\src\\Static"
 
 main :: IO ()
-main = run 8080 (serve (Proxy :: Proxy AusterityApi) server)
+main = do
+    conn <- SS.open "C:/Users/Micah/Desktop/Austerity.db"
+    run 8080 (serve (Proxy :: Proxy AusterityApi) (server conn))

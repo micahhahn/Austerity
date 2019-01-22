@@ -32,10 +32,15 @@ dependencies:
 - servant
 - servant-server
 - servant-lucid
-- servant-multipart
 - lucid
 - wai
 - warp
+- hourglass
+- http-api-data
+- sqlite-simple
+- beam-core
+- beam-sqlite
+- time
 
 library:
   source-dirs: 

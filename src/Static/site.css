@@ -6,4 +6,5 @@
 
 .textbox {
     position: absolute;
+    border: 1px solid #999999;
 }
