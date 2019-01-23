@@ -41,7 +41,7 @@ import Pdf
 
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
-type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] Form :> Post '[HTML] (Html ())
+type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())
 
 type AusterityApi = AusterityHome
                :<|> AusterityReceiptsNewGet
@@ -89,16 +89,33 @@ fullReceiptForm receipt vendors = do
             tr_ $ do
                 td_ $ label_ "Vendor:"
                 td_ $ select_ [name_ "vendor"] $ do
-                    mapM_ (\v -> option_ [value_ (Text.pack . show $ Beam._vendor_VendorId v)] (toHtml $ Beam._vendor_Name v)) vendors
+                    mapM_ (\v -> let attribs = [value_ (Text.pack . show $ Beam._vendor_VendorId v)] 
+                                     selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
+                                 in  option_ selected (toHtml $ Beam._vendor_Name v)) vendors
             tr_ $ do
                 td_ $ label_ "Amount:"
                 td_ $ input_ [type_ "text", name_ "amount", value_ (fst . getConst . amount $ receipt)]
             tr_ $ do
                 td_ $ input_ [type_ "submit", value_ "Create"]
 
-newReceiptPost :: SS.Connection -> Form -> Handler (Html ())
+newReceiptPost :: SS.Connection -> FullReceiptForm -> Handler (Html ())
 newReceiptPost conn r = do
-    return $ p_ [] (toHtml . show $ r)
+    vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
+    return $ do
+        doctypehtml_ $ do
+            html_ $ do
+                head_ $ do
+                    title_ "Austerity"
+                body_ $ do
+                    p_ "Create new Receipt"
+                    fullReceiptForm (validateFullReceipt r) vendors
+
+validateFullReceipt :: FullReceiptForm -> FullReceiptError
+validateFullReceipt form = FullReceipt'
+    { date = Const (getConst $ date form, Just "a")
+    , vendor = Const (getConst $ vendor form, Just "b")
+    , amount = Const (getConst $ amount form, Just "c")
+    } 
 
 data FullReceipt' a = FullReceipt'
     { date :: a LocalTime
