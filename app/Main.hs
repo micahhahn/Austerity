@@ -19,6 +19,8 @@ import Network.Wai.Handler.Warp
 import Servant
 import Servant.HTML.Lucid
 
+import Data.Maybe (isNothing)
+
 import GHC.Generics
 
 import qualified Beam as Beam
@@ -75,28 +77,39 @@ newReceipt conn = do
             html_ $ do
                 head_ $ do
                     title_ "Austerity"
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/bootstrap.min.css"]
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/site.css"]
                 body_ $ do
                     p_ "Create new Receipt"
                     fullReceiptForm defaultFullReceiptError vendors
 
 fullReceiptForm :: FullReceiptError -> [Beam.Vendor] -> Html ()
 fullReceiptForm receipt vendors = do
-    form_ [action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
-        table_ $ do
-            tr_ $ do
-                td_ $ label_ "Date:"
-                td_ $ input_ [type_ "text", name_ "date", value_ (fst . getConst . date $ receipt)]
-            tr_ $ do
-                td_ $ label_ "Vendor:"
-                td_ $ select_ [name_ "vendor"] $ do
-                    mapM_ (\v -> let attribs = [value_ (Text.pack . show $ Beam._vendor_VendorId v)] 
-                                     selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
-                                 in  option_ selected (toHtml $ Beam._vendor_Name v)) vendors
-            tr_ $ do
-                td_ $ label_ "Amount:"
-                td_ $ input_ [type_ "text", name_ "amount", value_ (fst . getConst . amount $ receipt)]
-            tr_ $ do
-                td_ $ input_ [type_ "submit", value_ "Create"]
+    form_ [class_ "form", action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
+        div_ [class_ "form-group"] $ do
+            label_ [for_ "date"] "Date"
+            let isValid = isNothing . snd . getConst . date $ receipt
+            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), name_ "date", id_ "date", value_ (fst . getConst . date $ receipt)]
+            makeError $ date receipt
+        div_ [class_ "form-group"] $ do
+            label_ [for_ "vendor"] "Vendor"
+            let isValid = isNothing . snd . getConst . date $ receipt
+            select_ [name_ "vendor", class_ ("form-control" <> (if isValid then "" else " is-invalid")), id_ "vendor"] $ do
+                mapM_ (\v -> let attribs = [value_ (Text.pack . show $ Beam._vendor_VendorId v)] 
+                                 selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
+                             in  option_ selected (toHtml $ Beam._vendor_Name v)) vendors
+            makeError $ vendor receipt
+        div_ [class_ "form-group"] $ do
+            label_ [for_ "amount"] "Amount"
+            let isValid = isNothing . snd . getConst . amount $ receipt
+            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), name_ "amount", value_ (fst . getConst . amount $ receipt)]
+            makeError $ amount receipt
+        button_ [type_ "submit", class_ "btn btn-primary"] "Submit"
+
+    where makeError :: Const (a, Maybe Text) b -> Html ()
+          makeError f = case snd . getConst $ f of
+              Nothing -> pure ()
+              Just e -> div_ [class_ "invalid-feedback"] $ toHtml e
 
 newReceiptPost :: SS.Connection -> FullReceiptForm -> Handler (Html ())
 newReceiptPost conn r = do
@@ -106,6 +119,8 @@ newReceiptPost conn r = do
             html_ $ do
                 head_ $ do
                     title_ "Austerity"
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/bootstrap.min.css"]
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/site.css"]
                 body_ $ do
                     p_ "Create new Receipt"
                     fullReceiptForm (validateFullReceipt r) vendors
