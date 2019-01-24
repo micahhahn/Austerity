@@ -13,6 +13,7 @@ import Control.Monad.IO.Class
 import Data.ByteString.Lazy as L
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Text.Read
 import Data.Proxy
 import Lucid
 import LucidExtensions
@@ -30,6 +31,7 @@ import qualified Database.Beam.Sqlite as BS
 import qualified Database.SQLite.Simple as SS
 
 import Data.Time
+import Data.Time.Format
 
 import Data.Functor.Identity
 import Data.Functor.Const
@@ -116,25 +118,36 @@ fullReceiptForm receipt vendors = do
               Just e -> div_ [class_ "invalid-feedback"] $ toHtml e
 
 newReceiptPost :: SS.Connection -> FullReceiptForm -> Handler (Html ())
-newReceiptPost conn r = do
-    vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
-    return $ do
-        doctypehtml_ $ do
-            html_ $ do
-                head_ $ do
-                    title_ "Austerity"
-                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/bootstrap.min.css"]
-                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/site.css"]
-                body_ $ do
-                    p_ "Create new Receipt"
-                    fullReceiptForm (validateFullReceipt r) vendors
+newReceiptPost conn r = case validateFullReceipt r of
+    Left f -> do
+        vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
+        return $ do
+            doctypehtml_ $ do
+                html_ $ do
+                    head_ $ do
+                        title_ "Austerity"
+                        link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/bootstrap.min.css"]
+                        link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/site.css"]
+                    body_ $ do
+                        p_ "Create new Receipt"
+                        fullReceiptForm f vendors
+    Right f -> return $ doctypehtml_ "Actually insert"
+    
+dateFormat :: String
+dateFormat = "%m/%d/%Y %I:%M %p"
 
-validateFullReceipt :: FullReceiptForm -> FullReceiptError
-validateFullReceipt form = FullReceipt'
-    { date = Const (getConst $ date form, Just "a")
-    , vendor = Const (getConst $ vendor form, Just "b")
-    , amount = Const (getConst $ amount form, Just "c")
-    } 
+validateFullReceipt :: FullReceiptForm -> Either FullReceiptError FullReceipt
+validateFullReceipt form = let mdate = parseTimeM False defaultTimeLocale dateFormat (Text.unpack . getConst . date $ form) :: Maybe LocalTime
+                               mvendor = readMaybe (Text.unpack . getConst . vendor $ form) :: Maybe Int
+                               mamount = readMaybe (Text.unpack . getConst . amount $ form) :: Maybe Double
+                               receipt = FullReceipt' <$> (Identity <$> mdate) <*> (Identity <$> mvendor) <*> (Identity <$> mamount)
+                           in  case receipt of
+                               Just r -> Right r
+                               Nothing -> Left $ FullReceipt'
+                                            { date = Const (getConst $ date form, maybe (Just "Invalid Time") (const Nothing) mdate)
+                                            , vendor = Const (getConst $ vendor form, Just "b")
+                                            , amount = Const (getConst $ amount form, Just "c")
+                                            } 
 
 data FullReceipt' a = FullReceipt'
     { date :: a LocalTime
