@@ -92,11 +92,11 @@ fullReceiptForm receipt vendors = do
         div_ [class_ "form-group"] $ do
             label_ [for_ "date"] "Date"
             let isValid = isNothing . snd . getConst . date $ receipt
-            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "Date", name_ "date", id_ "date", value_ (fst . getConst . date $ receipt)]
+            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "01/01/2000 12:00 AM", name_ "date", id_ "date", value_ (fst . getConst . date $ receipt)]
             makeError $ date receipt
         div_ [class_ "form-group"] $ do
             label_ [for_ "vendor"] "Vendor"
-            let isValid = isNothing . snd . getConst . date $ receipt
+            let isValid = isNothing . snd . getConst . vendor $ receipt
             select_ [name_ "vendor", class_ ("form-control" <> (if isValid then "" else " is-invalid")), id_ "vendor"] $ do
                 mapM_ (\v -> let attribs = [value_ (Text.pack . show $ Beam._vendor_VendorId v)] 
                                  selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
@@ -108,7 +108,7 @@ fullReceiptForm receipt vendors = do
                 div_ [class_ "input-group-prepend"] $ do
                     span_ [class_ "input-group-text", id_ "amountPrepend"] "$"
                 let isValid = isNothing . snd . getConst . amount $ receipt
-                input_ [type_ "text", aria_describedby_ "amountPrepend", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "Amount", name_ "amount", value_ (fst . getConst . amount $ receipt)]
+                input_ [type_ "text", aria_describedby_ "amountPrepend", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "100.00", name_ "amount", value_ (fst . getConst . amount $ receipt)]
                 makeError $ amount receipt
         button_ [type_ "submit", class_ "btn btn-primary"] "Submit"
 
@@ -144,9 +144,9 @@ validateFullReceipt form = let mdate = parseTimeM False defaultTimeLocale dateFo
                            in  case receipt of
                                Just r -> Right r
                                Nothing -> Left $ FullReceipt'
-                                            { date = Const (getConst $ date form, maybe (Just "Invalid Time") (const Nothing) mdate)
-                                            , vendor = Const (getConst $ vendor form, Just "b")
-                                            , amount = Const (getConst $ amount form, Just "c")
+                                            { date = Const (getConst $ date form, maybe (Just "The date must be the format 01/01/2000 12:00 AM") (const Nothing) mdate)
+                                            , vendor = Const (getConst $ vendor form, maybe (Just "You must choose a vendor") (const Nothing) mvendor)
+                                            , amount = Const (getConst $ amount form, maybe (Just "Must be in the format 100.00") (const Nothing) mamount)
                                             } 
 
 data FullReceipt' a = FullReceipt'
