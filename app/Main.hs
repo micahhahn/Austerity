@@ -15,6 +15,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Proxy
 import Lucid
+import LucidExtensions
 import Network.Wai.Handler.Warp
 import Servant
 import Servant.HTML.Lucid
@@ -89,7 +90,7 @@ fullReceiptForm receipt vendors = do
         div_ [class_ "form-group"] $ do
             label_ [for_ "date"] "Date"
             let isValid = isNothing . snd . getConst . date $ receipt
-            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), name_ "date", id_ "date", value_ (fst . getConst . date $ receipt)]
+            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "Date", name_ "date", id_ "date", value_ (fst . getConst . date $ receipt)]
             makeError $ date receipt
         div_ [class_ "form-group"] $ do
             label_ [for_ "vendor"] "Vendor"
@@ -101,9 +102,12 @@ fullReceiptForm receipt vendors = do
             makeError $ vendor receipt
         div_ [class_ "form-group"] $ do
             label_ [for_ "amount"] "Amount"
-            let isValid = isNothing . snd . getConst . amount $ receipt
-            input_ [type_ "text", class_ ("form-control" <> (if isValid then "" else " is-invalid")), name_ "amount", value_ (fst . getConst . amount $ receipt)]
-            makeError $ amount receipt
+            div_ [class_ "input-group"] $ do
+                div_ [class_ "input-group-prepend"] $ do
+                    span_ [class_ "input-group-text", id_ "amountPrepend"] "$"
+                let isValid = isNothing . snd . getConst . amount $ receipt
+                input_ [type_ "text", aria_describedby_ "amountPrepend", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "Amount", name_ "amount", value_ (fst . getConst . amount $ receipt)]
+                makeError $ amount receipt
         button_ [type_ "submit", class_ "btn btn-primary"] "Submit"
 
     where makeError :: Const (a, Maybe Text) b -> Html ()
