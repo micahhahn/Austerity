@@ -40,13 +40,16 @@ import Web.FormUrlEncoded
 
 import Pdf.Content.Processor
 
-import qualified Data.ByteString as BS
+import Debug.Trace
 
 import Pdf
+import Servant.JS
 
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())
+
+type AusterityJSTest = "receipts" :> "new" :> ReqBody '[JSON] FullReceiptForm :> Post '[JSON] FullReceiptError
 
 type AusterityApi = AusterityHome
                :<|> AusterityReceiptsNewGet
@@ -80,14 +83,18 @@ newReceipt conn = do
             html_ $ do
                 head_ $ do
                     title_ "Austerity"
-                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/bootstrap.min.css"]
-                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/site.css"]
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/bootstrap.css"]
+                    link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/site.css"]
+
                 body_ $ do
                     p_ "Create new Receipt"
                     fullReceiptForm defaultFullReceiptError vendors
 
+                    script_ [src_ "/static/scripts/bundle.js"] ("" :: Text)
+
 fullReceiptForm :: FullReceiptError -> [Beam.Vendor] -> Html ()
 fullReceiptForm receipt vendors = do
+    div_ [id_ "example"] ""
     form_ [class_ "form", action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
         div_ [class_ "form-group"] $ do
             label_ [for_ "date"] "Date"
@@ -102,6 +109,10 @@ fullReceiptForm receipt vendors = do
                                  selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
                              in  option_ selected (toHtml $ Beam._vendor_Name v)) vendors
             makeError $ vendor receipt
+            input_ [type_ "text", name_ "items[name]"]
+            input_ [type_ "text", name_ "items[price]"]
+            input_ [type_ "text", name_ "items[name]"]
+            input_ [type_ "text", name_ "items[price]"]
         div_ [class_ "form-group"] $ do
             label_ [for_ "amount"] "Amount"
             div_ [class_ "input-group"] $ do
@@ -140,18 +151,20 @@ validateFullReceipt :: FullReceiptForm -> Either FullReceiptError FullReceipt
 validateFullReceipt form = let mdate = parseTimeM False defaultTimeLocale dateFormat (Text.unpack . getConst . date $ form) :: Maybe LocalTime
                                mvendor = readMaybe (Text.unpack . getConst . vendor $ form) :: Maybe Int
                                mamount = readMaybe (Text.unpack . getConst . amount $ form) :: Maybe Double
-                               receipt = FullReceipt' <$> (Identity <$> mdate) <*> (Identity <$> mvendor) <*> (Identity <$> mamount)
-                           in  case receipt of
+                               receipt = FullReceipt' <$> (Identity <$> mdate) <*> (Identity <$> mvendor) <*> (Just [Identity 1, Identity 2]) <*> (Identity <$> mamount)
+                           in  trace (show form) $ case receipt of
                                Just r -> Right r
                                Nothing -> Left $ FullReceipt'
                                             { date = Const (getConst $ date form, maybe (Just "The date must be the format 01/01/2000 12:00 AM") (const Nothing) mdate)
                                             , vendor = Const (getConst $ vendor form, maybe (Just "You must choose a vendor") (const Nothing) mvendor)
+                                            , items = [Const ("1", Nothing)]
                                             , amount = Const (getConst $ amount form, maybe (Just "Must be in the format 100.00") (const Nothing) mamount)
                                             } 
 
 data FullReceipt' a = FullReceipt'
     { date :: a LocalTime
     , vendor :: a Int
+    , items :: [a Int]
     , amount :: a Double
     } deriving (Generic)
 
@@ -205,9 +218,10 @@ server :: SS.Connection -> Server AusterityApi
 server conn = return home
     :<|> newReceipt conn
     :<|> newReceiptPost conn 
-    :<|> serveDirectoryFileServer "C:\\Users\\micah\\Source\\Austerity\\src\\Static"
+    :<|> serveDirectoryFileServer "C:/Users/Micah/Source/Austerity/dist/static"
 
 main :: IO ()
 main = do
+    Prelude.putStrLn . Text.unpack $ jsForAPI (Proxy :: Proxy AusterityJSTest) jquery
     conn <- SS.open "C:/Users/Micah/Desktop/Austerity.db"
     run 8080 (serve (Proxy :: Proxy AusterityApi) (server conn))

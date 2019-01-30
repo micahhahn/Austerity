@@ -41,6 +41,7 @@ dependencies:
 - beam-core
 - beam-sqlite
 - time
+- servant-js
 
 library:
   source-dirs: 

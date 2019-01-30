@@ -1,3 +1,5 @@
 .stack-work/
 Austerity.cabal
 *~
+node_modules/
+dist
