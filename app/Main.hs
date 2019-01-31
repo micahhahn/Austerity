@@ -109,10 +109,6 @@ fullReceiptForm receipt vendors = do
                                  selected = if (Text.pack . show . Beam._vendor_VendorId $ v) == (fst . getConst . vendor $ receipt) then selected_ "selected" : attribs else attribs
                              in  option_ selected (toHtml $ Beam._vendor_Name v)) vendors
             makeError $ vendor receipt
-            input_ [type_ "text", name_ "items[name]"]
-            input_ [type_ "text", name_ "items[price]"]
-            input_ [type_ "text", name_ "items[name]"]
-            input_ [type_ "text", name_ "items[price]"]
         div_ [class_ "form-group"] $ do
             label_ [for_ "amount"] "Amount"
             div_ [class_ "input-group"] $ do

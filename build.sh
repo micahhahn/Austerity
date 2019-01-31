@@ -14,3 +14,4 @@ stack build
 cp $(stack path --dist-dir)/build/Austerity-exe/Austerity-exe.exe dist/Austerity.exe
 
 # Bootstrap
+stack exec Austerity-exe
