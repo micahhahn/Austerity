@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "./node_modules/.bin/webpack --config ./webpack.config.js --mode development"
+    "build": "./node_modules/.bin/webpack --config ./webpack.config.js --mode development",
+    "watch": "./node_modules/.bin/webpack --config ./webpack.config.js --mode development --watch"
   },
   "repository": {
     "type": "git",

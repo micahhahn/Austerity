@@ -3,18 +3,18 @@ import * as React from 'react';
 interface IFullReceipt
 {
     date: string;
-    vendor: number;
+    vendor: string;
     items: IFullReceiptItem[]
-    amount: number;
+    amount: string;
 }
 
 interface IFullReceiptItem
 {
     name: string;
-    price: number;
+    price: string;
 }
 
-interface IFullReceiptProps
+export interface IFullReceiptProps
 {
     vendors: IVendorProps[]
 }
@@ -25,17 +25,29 @@ interface IVendorProps
     vendorName: string;
 }
 
-class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt> {
+export class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt> {
     constructor(props: IFullReceiptProps) {
         super(props);
         this.state = {
             date: "",
-            vendor: 0,
+            vendor: "",
             items: [
-                { name: "Item1", price: 100 }
+                { name: "", price: "" }
             ],
-            amount: 0
+            amount: ""
         };
+    }
+
+    newItem = (e: React.MouseEvent<HTMLElement>) => {
+        var items = [...this.state.items];
+        items.push({ name: "", price: "" });   
+        this.setState({items: items});
+    }
+
+    itemChange = <T extends keyof IFullReceiptItem>(s: T, i: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        let items = [...this.state.items];
+        items[i][s] = e.target.value;
+        this.setState({items: items})
     }
 
     public render() {
@@ -43,23 +55,38 @@ class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt> {
             <div className="form">
                 <div className="form-group">
                     <label>Date</label>
-                    <input type="text" className="form-control" placeholder="01/01/2000 12:00 AM" value={this.state.date} />
+                    <input type="text" name="date" className="form-control" placeholder="01/01/2000 12:00 AM" value={this.state.date} onChange={e => this.setState({date: e.target.value})} />
                 </div>
                 <div className="form-group">
                     <label>Vendor</label>
-                    <select className="form-control">
+                    <select name="vendor" className="form-control" onChange={e => this.setState({ vendor: e.target.value})}>
                         {this.props.vendors.map((vendor) => 
-                            <option value={vendor.vendorId} key={vendor.vendorId} selected={this.state.vendor == vendor.vendorId}>{vendor.vendorName}</option>
+                            <option value={vendor.vendorId} key={vendor.vendorId}>{vendor.vendorName}</option>
                         )}
                     </select>
                 </div>
                 <div className="form-group">
                     <label>Items</label>
-                    {this.state.items.map((item) =>
-                        <div className="form-group">
-                            <input type="text" className="form-control" placeholder="Apples" value={item.name} />
+                    <div className="row">
+                        <div className="col">Name</div>
+                        <div className="col">Price</div>
+                    </div>
+                    {this.state.items.map((item, index) =>
+                        <div className="row" key={"items[" + index + "]"}>
+                            <div className="col">
+                                <input type="text" className="form-control" placeholder="Apples" value={item.name} onChange={e => this.itemChange("name", index, e)} />
+                            </div>
+                            <div className="col">
+                                <div className="input-group">
+                                    <div className="input-group-prepend">
+                                        <span className="input-group-text">$</span>
+                                    </div>
+                                    <input type="text" className="form-control" placeholder="100" value={item.price} onChange={e => this.itemChange("price", index, e)} />
+                                </div>
+                            </div>
                         </div>
                     )}
+                    <button onClick={this.newItem}>New Item</button>
                 </div>
                 <div className="form-group">
                     <label>Amount</label>
@@ -67,9 +94,10 @@ class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt> {
                         <div className="input-group-prepend">
                             <span className="input-group-text">$</span>
                         </div>
-                        <input type="text" className="form-control" placeholder="100.00" value={this.state.amount} />
+                        <input name="amount" type="text" className="form-control" placeholder="100.00" value={this.state.amount} onChange={e => this.setState({amount: e.target.value})} />
                     </div>
                 </div>
+                <button type="button" className="btn btn-primary">Create Receipt</button>
             </div>
         );
     }    

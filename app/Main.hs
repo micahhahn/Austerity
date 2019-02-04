@@ -6,12 +6,14 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
 import Control.Monad.IO.Class
 import Data.ByteString.Lazy as L
 import Data.Text (Text)
+import Data.Text.Encoding as TE
 import qualified Data.Text as Text
 import Text.Read
 import Data.Proxy
@@ -45,6 +47,8 @@ import Debug.Trace
 import Pdf
 import Servant.JS
 
+import Data.Aeson
+
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())
@@ -75,9 +79,36 @@ defaultFullReceiptError = FullReceipt'
     , amount = Const ("", Nothing)
     }
 
+type family Props a where
+    Props FullReceipt = FullReceiptProps
+
+data FullReceiptProps = FullReceiptProps
+    { vendors :: [VendorProps]
+    } deriving (Generic)
+ 
+deriving instance ToJSON FullReceiptProps
+
+data VendorProps = VendorProps
+    { vendorId :: Text
+    , vendorName :: Text
+    } deriving (Generic)
+
+deriving instance ToJSON VendorProps
+
+getProps :: [Beam.Vendor] -> FullReceiptProps
+getProps vs = FullReceiptProps $ (\v -> VendorProps (Text.pack . show . Beam._vendor_VendorId $ v) (Beam._vendor_Name v)) <$> vs
+
+bootstrapReact :: (ToJSON a) => a -> Text -> Html ()
+bootstrapReact props typeName = do
+    div_ [id_ "content"] ""
+    script_ [type_ "text/javascript"] $
+        "const props = " <> (TE.decodeUtf8 . L.toStrict . encode $ props) <> ";\n" <>
+        "Austerity.render" <> typeName <> "(document.getElementById('content'), props);"
+
 newReceipt :: SS.Connection -> Handler (Html ())
 newReceipt conn = do
     vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
+    liftIO . Prelude.putStrLn . show . encode . getProps $ vendors
     return $ do
         doctypehtml_ $ do
             html_ $ do
@@ -85,17 +116,16 @@ newReceipt conn = do
                     title_ "Austerity"
                     link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/bootstrap.css"]
                     link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/site.css"]
+                    script_ [src_ "/static/scripts/bundle.js"] ("" :: Text)
 
                 body_ $ do
                     p_ "Create new Receipt"
-                    fullReceiptForm defaultFullReceiptError vendors
-
-                    script_ [src_ "/static/scripts/bundle.js"] ("" :: Text)
+                    bootstrapReact (getProps vendors) "FullReceipt"
 
 fullReceiptForm :: FullReceiptError -> [Beam.Vendor] -> Html ()
 fullReceiptForm receipt vendors = do
-    div_ [id_ "example"] ""
-    form_ [class_ "form", action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
+    div_ [id_ "content"] ""
+    {- form_ [class_ "form", action_ $ "/" <> toUrlPiece (safeLink (Proxy :: Proxy AusterityApi) (Proxy :: Proxy AusterityReceiptsNewGet)), method_ "post"] $ do
         div_ [class_ "form-group"] $ do
             label_ [for_ "date"] "Date"
             let isValid = isNothing . snd . getConst . date $ receipt
@@ -117,7 +147,7 @@ fullReceiptForm receipt vendors = do
                 let isValid = isNothing . snd . getConst . amount $ receipt
                 input_ [type_ "text", aria_describedby_ "amountPrepend", class_ ("form-control" <> (if isValid then "" else " is-invalid")), placeholder_ "100.00", name_ "amount", value_ (fst . getConst . amount $ receipt)]
                 makeError $ amount receipt
-        button_ [type_ "submit", class_ "btn btn-primary"] "Submit"
+        button_ [type_ "submit", class_ "btn btn-primary"] "Submit" -}
 
     where makeError :: Const (a, Maybe Text) b -> Html ()
           makeError f = case snd . getConst $ f of

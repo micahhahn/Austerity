@@ -1,9 +1,16 @@
 import * as React from 'react';
 import { render } from 'react-dom';
 import App from './components/App';
-import FullReceipt from './components/FullReceipt';
+import {FullReceipt, IFullReceiptProps} from './components/FullReceipt';
 
-render(
-    <FullReceipt vendors={[{ vendorId: 1, vendorName: "First" }, {vendorId: 2, vendorName: "Second"}]} />,
-    document.getElementById('example'),
-);
+declare global {
+    interface Window { Austerity: any; }
+}
+
+window.Austerity = window.Austerity || (() => {
+    return {
+        renderFullReceipt: (root: HTMLElement, props: IFullReceiptProps) => {
+            render(React.createElement(FullReceipt, props), root)
+        }
+    };
+})();

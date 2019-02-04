@@ -42,6 +42,7 @@ dependencies:
 - beam-sqlite
 - time
 - servant-js
+- aeson
 
 library:
   source-dirs: 
