@@ -3,3 +3,4 @@ Austerity.cabal
 *~
 node_modules/
 dist
+build/

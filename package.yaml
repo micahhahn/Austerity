@@ -32,6 +32,8 @@ dependencies:
 - servant
 - servant-server
 - servant-lucid
+- servant-foreign
+- servant-js
 - lucid
 - wai
 - warp
@@ -41,7 +43,6 @@ dependencies:
 - beam-core
 - beam-sqlite
 - time
-- servant-js
 - aeson
 
 library:

@@ -50,6 +50,10 @@ export class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt
         this.setState({items: items})
     }
 
+    submit = (e: React.MouseEvent<HTMLElement>) => {
+        
+    }
+
     public render() {
         return (
             <div className="form">
@@ -97,7 +101,7 @@ export class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt
                         <input name="amount" type="text" className="form-control" placeholder="100.00" value={this.state.amount} onChange={e => this.setState({amount: e.target.value})} />
                     </div>
                 </div>
-                <button type="button" className="btn btn-primary">Create Receipt</button>
+                <button type="button" className="btn btn-primary" onClick={this.submit}>Create Receipt</button>
             </div>
         );
     }    

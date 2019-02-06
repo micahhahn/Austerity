@@ -49,6 +49,12 @@ import Servant.JS
 
 import Data.Aeson
 
+type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
+           :<|> "receipt" :> Capture "x" Int :> Get '[JSON] FullReceipt
+           :<|> "receipts" :> "query" :> QueryParam "y" Text :> Post '[JSON] FullReceipt
+           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" Int :> Get '[JSON] FullReceipt
+           :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] FullReceipt
+ 
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())
