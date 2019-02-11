@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# LANGUAGE DeriveGeneric #-}
+
 module TypeInfo (
     makeTypeInfo,
     DatatypeInfo(..),
@@ -15,8 +17,8 @@ module TypeInfo (
     GDatatypeInfo
 ) where
 
-import Data.Map.Lazy (Map)
-import qualified Data.Map.Lazy as Map
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -24,6 +26,12 @@ import qualified Data.Text as Text
 import Data.Time
 import Data.Typeable
 import GHC.Generics
+
+data X = X [Int] [Text]
+    deriving (Generic, Typeable)
+
+{- Sadly, I think we will need to rework this approach.  Its going to get hairy around the edges.
+   Probably best to create a auto-derivable typeclass to give the user flexibility. -}
 
 makeTypeInfo :: forall t. (Typeable t, Generic t, GDatatypeInfo (Rep t)) => Proxy t -> Map TypeRep DatatypeInfo
 makeTypeInfo t = getDatatypeInfo (from (undefined :: t)) (typeRep t) Set.empty
@@ -56,6 +64,7 @@ type family (IsPrim a) :: Bool where
     IsPrim Int       = 'True
     IsPrim LocalTime = 'True
     IsPrim Double    = 'True
+    IsPrim ([] a)    = IsPrim a
     IsPrim a         = 'False
 
 class MkTypeInfo (p :: Bool) a where

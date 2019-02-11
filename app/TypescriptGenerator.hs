@@ -34,8 +34,8 @@ import Text.Groom
 
 import TypeInfo
 
-import Data.Map.Lazy (Map)
-import qualified Data.Map.Lazy as Map
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Data.Time
 
@@ -43,20 +43,26 @@ import Data.Time
 data TypeScript
 
 getTSName :: TypeRep -> Text
-getTSName t = T.pack $ tyConName (typeRepTyCon t)
+getTSName t = name <> argText
+    where name = if typeRepTyCon t == (typeRepTyCon . typeRep $ (Proxy :: Proxy [()]))
+                 then "Array"
+                 else (T.pack . tyConName . typeRepTyCon $ t)
 
-data TypeDesc a = TypeDesc a (Map TypeRep DatatypeInfo)
+          args = getTSName <$> typeRepArgs t
+          argText = if null args then "" else "<" <> T.intercalate ", " args <> ">"
+
+data TypeContext a = TypeContext a (Map TypeRep DatatypeInfo)
     deriving (Functor)
 
-instance Applicative TypeDesc where
-    pure a = TypeDesc a (Map.empty)
-    (<*>) (TypeDesc f m) (TypeDesc a m') = TypeDesc (f a) (Map.union m m')
+instance Applicative TypeContext where
+    pure a = TypeContext a (Map.empty)
+    (<*>) (TypeContext f m) (TypeContext a m') = TypeContext (f a) (Map.union m m')
 
-instance Monad TypeDesc where
-    return a = TypeDesc a (Map.empty)
+instance Monad TypeContext where
+    return a = TypeContext a (Map.empty)
 
-    (>>=) (TypeDesc a m) f = let (TypeDesc a' m') = f a
-                              in TypeDesc a' (Map.union m m') 
+    (>>=) (TypeContext a m) f = let (TypeContext a' m') = f a
+                                 in TypeDesc a' (Map.union m m') 
 
 type family (IsTSPrim a) :: Bool where
     IsTSPrim Int       = 'True
@@ -145,4 +151,4 @@ endpoints = getEndpoints (Proxy :: Proxy InnerApi)
 g = do
     let output = writeEndpoints $ getEndpoints $ (Proxy :: Proxy InnerApi)
     {- let jq = jsForAPI (Proxy :: Proxy InnerApi) jquery -}
-    TIO.writeFile "C:/Users/Micah/Source/Austerity/build/Endpoints.ts" (output <> "\n\n" {- <> jq -})
+    TIO.writeFile "./build/Endpoints.ts" (output <> "\n\n" {- <> jq -})
