@@ -44,6 +44,7 @@ dependencies:
 - beam-sqlite
 - time
 - aeson
+- containers
 
 library:
   source-dirs: 

@@ -49,11 +49,11 @@ import Servant.JS
 
 import Data.Aeson
 
-type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
-           :<|> "receipt" :> Capture "x" Int :> Get '[JSON] FullReceipt
-           :<|> "receipts" :> "query" :> QueryParam "y" Text :> Post '[JSON] FullReceipt
-           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" Int :> Get '[JSON] FullReceipt
-           :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] FullReceipt
+type InnerApi = "receipts" :> Get '[JSON] [Int]
+           :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
+           :<|> "receipts" :> "query" :> QueryParam "y" Text :> Post '[JSON] Int
+           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" Int :> Get '[JSON] Int
+           :<|> "receipt" :> "body" :> ReqBody '[JSON] Int :> Get '[JSON] Int
  
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
@@ -198,14 +198,16 @@ data FullReceipt' a = FullReceipt'
     , vendor :: a Int
     , items :: [a Int]
     , amount :: a Double
-    } deriving (Generic)
+    }
 
 type FullReceipt = FullReceipt' Identity
 deriving instance Show FullReceipt
+deriving instance Generic FullReceipt
 
 {- The type to be marshalled from the body of an HTTP request -}
 type FullReceiptForm = FullReceipt' (Const Text)
 deriving instance Show FullReceiptForm
+deriving instance Generic FullReceiptForm
 deriving instance FromForm FullReceiptForm
 
 {-  -}

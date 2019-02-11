@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -6,6 +8,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+{-# LANGUAGE TypeOperators #-}
+
+{-# LANGUAGE DeriveGeneric #-}
 
 module TypescriptGenerator where
 
@@ -18,45 +24,92 @@ import Data.Text.Encoding
 import GHC.Generics
 
 import Servant.Foreign
-import Servant.JS
 
 import Main
 
+import Data.Typeable
+
+import Debug.Trace
 import Text.Groom
+
+import TypeInfo
+
+import Data.Map.Lazy (Map)
+import qualified Data.Map.Lazy as Map
+
+import Data.Time
 
 -- Dummy type to parameterize instances
 data TypeScript
 
-type family (IsTSPrim a) :: Bool where
-    IsTSPrim Int = 'True
-    IsTSPrim a   = 'False
+getTSName :: TypeRep -> Text
+getTSName t = T.pack $ tyConName (typeRepTyCon t)
 
-instance (IsTSPrim a ~ flag, HasForeignType' flag TypeScript Text a) => HasForeignType TypeScript Text a where
+data TypeDesc a = TypeDesc a (Map TypeRep DatatypeInfo)
+    deriving (Functor)
+
+instance Applicative TypeDesc where
+    pure a = TypeDesc a (Map.empty)
+    (<*>) (TypeDesc f m) (TypeDesc a m') = TypeDesc (f a) (Map.union m m')
+
+instance Monad TypeDesc where
+    return a = TypeDesc a (Map.empty)
+
+    (>>=) (TypeDesc a m) f = let (TypeDesc a' m') = f a
+                              in TypeDesc a' (Map.union m m') 
+
+type family (IsTSPrim a) :: Bool where
+    IsTSPrim Int       = 'True
+    IsTSPrim Text      = 'True
+    IsTSPrim LocalTime = 'True
+    IsTSPrim Double    = 'True
+    IsTSPrim a         = 'False
+
+instance (IsTSPrim a ~ flag, HasForeignType' flag TypeScript (TypeDesc Text) a) => HasForeignType TypeScript (TypeDesc Text) a where
     typeFor = typeFor' (Proxy :: Proxy flag)
 
 class HasForeignType' (flag :: Bool) lang ftype a where
     typeFor' :: Proxy flag -> Proxy lang -> Proxy ftype -> Proxy a -> ftype 
 
-instance HasForeignType' 'True TypeScript Text Int where
-    typeFor' _ _ _ _ = "number"
+instance HasForeignType' 'True TypeScript (TypeDesc Text) Int where
+    typeFor' _ _ _ _ = return "number"
 
-instance (Generic a) => HasForeignType' 'False TypeScript Text a where
-    typeFor' _ _ _ q = makeType q
+instance HasForeignType' 'True TypeScript (TypeDesc Text) Double where
+    typeFor' _ _ _ _ = return "number"
 
-class MkTypeScript f where
-    makeType :: Proxy (f a) -> Text
+instance HasForeignType' 'True TypeScript (TypeDesc Text) Text where
+    typeFor' _ _ _ _ = return "string"
 
-instance (Datatype c) => MkTypeScript (D1 c f) where
-    makeType x = T.pack (datatypeName x)
+instance HasForeignType' 'True TypeScript (TypeDesc Text) LocalTime where
+    typeFor' _ _ _ _ = return "string"
 
-writeEndpoint :: Req Text -> Text
-writeEndpoint t = queryInterface <>
+instance (Generic a, Typeable a, GDatatypeInfo (Rep a)) => HasForeignType' 'False TypeScript (TypeDesc Text) a where
+    typeFor' _ _ _ q = TypeDesc (getTSName $ typeRep (Proxy :: Proxy a)) (makeTypeInfo (Proxy :: Proxy a))
+
+writeEndpoint :: Req (TypeDesc Text) -> TypeDesc Text
+writeEndpoint t = do
+    let functionName = mconcat . map T.toTitle . unFunctionName . _reqFuncName $ t
+    successType <- maybe (return "void") id (_reqReturnType t)
+    {-let url = "\"/\" + " <> T.intercalate "+ \"/\" + " (mapSegment . unSegment <$> (_path . _reqUrl $ t))
+    captures <- sequence [type' >>= (\t -> return $ name <> ": " <> t) | Cap (Arg (PathSegment name) type') <- (unSegment <$> (_path . _reqUrl $ t))]
+    successType <- maybe (return "void") id (_reqReturnType t)
+    let requiredArgs = ["onSuccess: (s: " <> successType <> ") => void", "onError: (s) => void"]
+    let args = T.intercalate ", " (captures ++ requiredArgs)-}
+    return $ "\texport function " <> functionName <> "(" <> ")\n" <>
+             "\t{\n" <> successType <>
+             "\t}"
+
+    where mapSegment :: SegmentType (TypeDesc Text) -> Text
+          mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
+          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(" <> name <> ")"
+
+    {-(queryInterface <>
                   "\texport function " <> functionName <> "(" <> args <> ")\n" <>
                   "\t{\n" <>
                   "\t\t$.ajax({\n" <>
                   "\t\t\t" <> T.intercalate ",\n\t\t\t" ajaxParams <> "\n" <>
                   "\t\t});\n" <>
-                  "\t}"
+                  "\t}", )
     where functionName = mconcat . map T.toTitle . unFunctionName . _reqFuncName $ t
           url = "url: \"/\" + " <> (T.intercalate "+ \"/\" + " $ map (mapSegment . unSegment) (_path . _reqUrl $ t))
           captures = [ name <> ": " <> type' | Cap (Arg (PathSegment name) type') <- (unSegment <$> (_path . _reqUrl $ t))]
@@ -77,16 +130,19 @@ writeEndpoint t = queryInterface <>
 
           mapSegment :: SegmentType Text -> Text
           mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
-          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(" <> name <> ")" 
+          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(" <> name <> ")"  -}
 
-writeEndpoints :: [Req Text] -> Text
-writeEndpoints ts = "namespace Ajax\n" <>
-                    "{\n" <>
-                    T.intercalate "\n\n" (writeEndpoint <$> ts) <> "\n" <>
-                    "}"
+writeEndpoints :: [Req (TypeDesc Text)] -> Text
+writeEndpoints ts = let (TypeDesc ts' m) = sequence (writeEndpoint <$> ts)
+                     in "namespace Ajax\n" <>
+                        "{\n" <>
+                        T.intercalate "\n\n" ts' <> "\n" <>
+                        "}"
+
+getEndpoints = listFromAPI (Proxy :: Proxy TypeScript) (Proxy :: Proxy (TypeDesc Text))
+endpoints = getEndpoints (Proxy :: Proxy InnerApi)
 
 g = do
     let output = writeEndpoints $ getEndpoints $ (Proxy :: Proxy InnerApi)
-    let jq = jsForAPI (Proxy :: Proxy InnerApi) jquery
+    {- let jq = jsForAPI (Proxy :: Proxy InnerApi) jquery -}
     TIO.writeFile "C:/Users/Micah/Source/Austerity/build/Endpoints.ts" (output <> "\n\n" {- <> jq -})
-    putStrLn . groom . getEndpoints $ (Proxy :: Proxy InnerApi)
