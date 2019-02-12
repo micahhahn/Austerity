@@ -49,12 +49,19 @@ import Servant.JS
 
 import Data.Aeson
 
+import Servant.TS
+import qualified Data.Text.IO as TIO
+
 type InnerApi = "receipts" :> Get '[JSON] [Int]
            :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
            :<|> "receipts" :> "query" :> QueryParam "y" Text :> Post '[JSON] Int
            :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" Int :> Get '[JSON] Int
            :<|> "receipt" :> "body" :> ReqBody '[JSON] Int :> Get '[JSON] Int
  
+g = do
+    let t = tsForAPI (Proxy :: Proxy InnerApi)
+    TIO.writeFile "C:/Users/MicahH/Source/Austerity/build/Endpoints.ts" t
+
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())

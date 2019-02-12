@@ -262,6 +262,16 @@ instance TSType LT.Text where
 instance TSType Version where
     tsType _ = return "string"
 
+instance (TSType a) => TSType (Maybe a) where
+    tsType _ = do
+        ts <- tsType (Proxy :: Proxy a)
+        return $ ts <> " | null"
+
+instance (TSType a) => TSType [a] where
+    tsType _ = do
+        ts <- tsType (Proxy :: Proxy a)
+        return $ "Array<" <> ts <> ">"
+
 instance (TSType a) => TSType (NonEmpty a) where
     tsType _ = do
         ts <- tsType (Proxy :: Proxy a)
