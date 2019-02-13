@@ -104,61 +104,6 @@ writeEndpoints ts = let (TypeContext ts' m) = sequence (writeEndpoint <$> ts)
                         Text.intercalate "\n\n" ts' <> "\n" <>
                         "}"
 
-{-
-writeEndpoint :: Req (TypeDesc Text) -> TypeDesc Text
-writeEndpoint t = do
-    let functionName = mconcat . map T.toTitle . unFunctionName . _reqFuncName $ t
-    successType <- maybe (return "void") id (_reqReturnType t)
-    let url = "\"/\" + " <> T.intercalate "+ \"/\" + " (mapSegment . unSegment <$> (_path . _reqUrl $ t))
-    captures <- sequence [type' >>= (\t -> return $ name <> ": " <> t) | Cap (Arg (PathSegment name) type') <- (unSegment <$> (_path . _reqUrl $ t))]
-    successType <- maybe (return "void") id (_reqReturnType t)
-    let requiredArgs = ["onSuccess: (s: " <> successType <> ") => void", "onError: (s) => void"]
-    let args = T.intercalate ", " (captures ++ requiredArgs)
-    return $ "\texport function " <> functionName <> "(" <> ")\n" <>
-             "\t{\n" <> successType <>
-             "\t}"
-
-    where mapSegment :: SegmentType (TypeDesc Text) -> Text
-          mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
-          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(" <> name <> ")"
-
-    (queryInterface <>
-                  "\texport function " <> functionName <> "(" <> args <> ")\n" <>
-                  "\t{\n" <>
-                  "\t\t$.ajax({\n" <>
-                  "\t\t\t" <> T.intercalate ",\n\t\t\t" ajaxParams <> "\n" <>
-                  "\t\t});\n" <>
-                  "\t}", )
-    where functionName = mconcat . map T.toTitle . unFunctionName . _reqFuncName $ t
-          url = "url: \"/\" + " <> (T.intercalate "+ \"/\" + " $ map (mapSegment . unSegment) (_path . _reqUrl $ t))
-          captures = [ name <> ": " <> type' | Cap (Arg (PathSegment name) type') <- (unSegment <$> (_path . _reqUrl $ t))]
-          query = (\(Arg (PathSegment name) type') -> name <> ": " <> type' <> ";") . _queryArgName <$> (_queryStr . _reqUrl $ t)
-          requiredArgs = ["onSuccess: (s: " <> successType <> ") => void", "onError: (s) => void"]
-          args = T.intercalate ", " (captures ++ queryParam ++ requiredArgs)
-          successType = maybe "void" id (_reqReturnType t)
-
-          (queryParam, queryInterface) = if null . _queryStr . _reqUrl $ t
-                                         then ([], "")
-                                         else (["$query: I" <> functionName <> "QueryParams"]
-                                              , "\texport interface I" <> functionName <> "QueryParams\n" <>
-                                                "\t{\n" <>
-                                                "\t\t" <> T.intercalate "\n\t\t" query <> "\n" <>
-                                                "\t}\n\n")
-                                         
-          ajaxParams = [url, "success: onSuccess", "error: onError", "type: '" <> decodeUtf8 (_reqMethod t) <> "'"]
-
-          mapSegment :: SegmentType Text -> Text
-          mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
-          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(" <> name <> ")"  -}
-
-{- 
-writeEndpoints :: [Req (TypeDesc Text)] -> Text
-writeEndpoints ts = let (TypeDesc ts' m) = sequence (writeEndpoint <$> ts)
-                     in "namespace Ajax\n" <>
-                        "{\n" <>
-                        T.intercalate "\n\n" ts' <> "\n" <>
-                        "}" -}
-
 data TypeConstructor = TypeConstructor
     { datatype :: TypeRep
     , constructor :: Text
