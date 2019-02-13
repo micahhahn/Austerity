@@ -31,7 +31,9 @@ import Data.Sequence (Seq)
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as LT
+import Data.Time
 import Data.Typeable
 import qualified Data.Vector as V
 import qualified Data.Vector.Generic as VG
@@ -54,10 +56,53 @@ instance (TSType a) => HasForeignType TypeScript (TypeContext Text) a where
     typeFor _ _ p = tsType p
 
 tsForAPI :: (HasForeign TypeScript (TypeContext Text) api, GenerateList (TypeContext Text) (Foreign (TypeContext Text) api)) => Proxy api -> Text
-tsForAPI api = textify $ listFromAPI (Proxy :: Proxy TypeScript) (Proxy :: Proxy (TypeContext Text)) api
+tsForAPI api = writeEndpoints $ listFromAPI (Proxy :: Proxy TypeScript) (Proxy :: Proxy (TypeContext Text)) api
 
-textify :: [Req (TypeContext Text)] -> Text
-textify = undefined
+{- Using 'data' in jquery options potentially incorrect? -}
+
+writeEndpoint :: Req (TypeContext Text) -> TypeContext Text
+writeEndpoint t = do
+    let functionName = mconcat . map Text.toTitle . unFunctionName . _reqFuncName $ t
+    let method = TE.decodeUtf8 $ _reqMethod t
+    successType <- maybe (return "void") id (_reqReturnType t)
+    captures <- sequence [type' >>= (\t -> return $ name <> ": " <> t) | Cap (Arg (PathSegment name) type') <- (unSegment <$> (_path . _reqUrl $ t))]
+    (bodyArg, bodyJQueryArg) <- maybe (return ([], [])) (fmap (\t -> (["$body: " <> t], [("data", "$body")]))) $ _reqBody t
+    
+    q <- sequence $ (\a -> do
+                        t <- _argType . _queryArgName $ a
+                        return (unPathSegment . _argName . _queryArgName $ a, t)
+                    ) <$> (_queryStr . _reqUrl $ t)
+    
+    let queryArgs = if null q then [] else [("$query: {" <> Text.intercalate ", " ((\(l, r) -> l <> ": " <> r) <$> q) <> "}")]
+
+    let queryPrepare = if null q then ""
+                                 else "\t\tlet $queryArgs : string[] = [];\n" <>
+                                      Text.intercalate "\n" ((\n -> "\t\tif ($query." <> n <> " !== undefined)\n" <>
+                                                                    "\t\t\t$queryArgs.push(encodeURIComponent(String($query." <> n <> ")));\n") . fst <$> q) <> "\n" <>
+                                      "\t\tlet $queryString = $queryArgs.length == 0 ? \"\" : \"?\" + $queryArgs.join(\"&\");\n\n"
+
+    let url = "\"/\" + " <> (Text.intercalate "+ \"/\" + " (mapSegment . unSegment <$> (_path . _reqUrl $ t))) <>
+              if null q then "" else " + $queryString"
+
+    let args = captures ++ queryArgs ++ bodyArg ++ ["onSuccess: (result: " <> successType <> ") => void", "onError: () => void"]
+    let jqueryArgs = [("url", url), ("success", "onSuccess"), ("error", "onError"), ("method", "\"" <> method <> "\"")] ++ bodyJQueryArg
+    return $ "\texport function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
+             "\t{\n" <>
+             queryPrepare <>
+             "\t\t$.ajax({\n\t\t\t" <> Text.intercalate ",\n\t\t\t" ((\(l, r) -> l <> ": " <> r) <$> jqueryArgs) <> "\n\t\t});\n" <>
+             "\t}"
+
+    where mapSegment :: SegmentType (TypeContext Text) -> Text
+          mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
+          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(String(" <> name <> "))"
+
+writeEndpoints :: [Req (TypeContext Text)] -> Text
+writeEndpoints ts = let (TypeContext ts' m) = sequence (writeEndpoint <$> ts)
+                     in "namespace Ajax\n" <>
+                        "{\n" <>
+                        Text.intercalate "\n\n" (Map.elems m) <> "\n" <>
+                        Text.intercalate "\n\n" ts' <> "\n" <>
+                        "}"
 
 {-
 writeEndpoint :: Req (TypeDesc Text) -> TypeDesc Text
@@ -132,6 +177,9 @@ instance Monad TypeContext where
     (>>=) (TypeContext a m) f = let (TypeContext a' m') = f a
                                  in TypeContext a' (Map.union m m') 
 
+sanitizeTSName :: Text -> Text
+sanitizeTSName = Text.replace "'" ""
+
 class TSType a where
     tsType :: Proxy a -> TypeContext Text
     default tsType :: (Generic a, Typeable a, TSDatatype (Rep a)) => Proxy a -> TypeContext Text
@@ -155,15 +203,15 @@ instance (TSConstructor a, TSConstructor b) => TSConstructor (a :+: b) where
 instance (Constructor a, TSSelector c) => TSConstructor (C1 a c) where
     tsConstructor c@(M1 r) t isTagged = do
         selectors <- tsSelector r
-        let con = TypeConstructor t (Text.pack . conName $ c)
-        let interface = ("interface " <> (Text.pack . conName $ c) <> "\n" <>
-                         "{\n" <>
-                         (if isTagged then "\ttag: \"" <> (Text.pack . conName $ c) <> "\";\n" else "") <>
+        let con = TypeConstructor t (sanitizeTSName . Text.pack . conName $ c)
+        let interface = ("\tinterface " <> (sanitizeTSName . Text.pack . conName $ c) <> "\n" <>
+                         "\t{\n" <>
+                         (if isTagged then "\t\ttag: \"" <> (sanitizeTSName . Text.pack . conName $ c) <> "\";\n" else "") <>
                          (if null selectors then "" else 
-                            if conIsRecord c then mconcat $ (\(l, r) -> "\t" <> l <> ": " <> r <> ";\n") <$> selectors 
-                                             else "contents: [" <> Text.intercalate ", " (snd <$> selectors) <> "];" ) <>
-                         "}")
-        TypeContext (Text.pack . conName $ c) (Map.insert con interface Map.empty)
+                            if conIsRecord c then mconcat $ (\(l, r) -> "\t\t" <> l <> ": " <> r <> ";\n") <$> selectors 
+                                             else "\t\tcontents: [" <> Text.intercalate ", " (snd <$> selectors) <> "];" ) <>
+                         "\t}\n")
+        TypeContext (sanitizeTSName . Text.pack . conName $ c) (Map.insert con interface Map.empty)
 
 class TSSelector a where
     tsSelector :: a p -> TypeContext [(Text, Text)]
@@ -348,7 +396,8 @@ instance (TSType a) => TSType (V.Vector a) where
 
 {- instance ToJSON TimeOfDay where -}
 
-{- instance ToJSON LocalTime where -}
+instance TSType LocalTime where
+    tsType _ = return "string"
 
 {- instance ToJSON ZonedTime where -}
 
