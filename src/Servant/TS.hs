@@ -104,6 +104,16 @@ writeEndpoints ts = let (TypeContext ts' m) = sequence (writeEndpoint <$> ts)
                         Text.intercalate "\n\n" ts' <> "\n" <>
                         "}"
 
+data TsType = TsBoolean
+            | TsNumber
+            | TsString
+            | TsUnion [(Text, TsType)]
+            | TsNullable TsType
+            | TsObject [(Text, TsType)]
+            | TsTuple [TsType]
+            | TsArray TsType
+    deriving (Show)
+
 data TypeConstructor = TypeConstructor
     { datatype :: TypeRep
     , constructor :: Text
