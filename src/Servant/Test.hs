@@ -73,7 +73,7 @@ h__ = return undefined
 h = serve (Proxy :: Proxy InnerApi) h__
 
 g = do
-    let t = tsForAPI (Proxy :: Proxy InnerApi)
+    let t = tsForAPI (Proxy :: Proxy InnerApi) (TsGenOptions TsStringSingleQuotes)
     TIO.writeFile "C:/Users/Micah/Source/Austerity/build/Endpoints.ts" t
 
 type AusterityHome = "home" :> Get '[HTML] (Html ())
