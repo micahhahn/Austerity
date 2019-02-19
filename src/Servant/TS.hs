@@ -88,13 +88,16 @@ writeEndpoint t = do
     
     let queryArgs = if null q then [] else [("$query: {" <> Text.intercalate ", " ((\(l, r) -> l <> ": " <> tsTypeName r) <$> q) <> "}")]
 
+    let checkArg (n, t) = let param = "$query." <> n
+                           in "\t\tif (" <> param <> " !== undefined)\n" <>
+                              "\t\t\t$queryArgs.push(\"" <> n <> "=\" + encodeURIComponent(" <> writeStringCast param t <> "));\n"
+
     let queryPrepare = if null q then ""
                                  else "\t\tlet $queryArgs : string[] = [];\n" <>
-                                      Text.intercalate "\n" ((\n -> "\t\tif ($query." <> n <> " !== undefined)\n" <>
-                                                                    "\t\t\t$queryArgs.push(encodeURIComponent(String($query." <> n <> ")));\n") . fst <$> q) <> "\n" <>
+                                      Text.intercalate "\n" (checkArg <$> q) <> "\n" <>
                                       "\t\tlet $queryString = $queryArgs.length == 0 ? \"\" : \"?\" + $queryArgs.join(\"&\");\n\n"
 
-    let url = "\"/\" + " <> (Text.intercalate "+ \"/\" + " (mapSegment . unSegment <$> (_path . _reqUrl $ t))) <>
+    let url = "\"" <> (mconcat (mapSegment . unSegment <$> (_path . _reqUrl $ t))) <> "\"" <>
               if null q then "" else " + $queryString"
 
     let args = captures ++ queryArgs ++ bodyArg ++ ["onSuccess: (result: " <> tsTypeName successType <> ") => void", "onError: () => void"]
@@ -106,8 +109,14 @@ writeEndpoint t = do
              "\t}"
 
     where mapSegment :: SegmentType (TsContext TsType) -> Text
-          mapSegment (Static (PathSegment s)) = "\"" <> s <> "\""
-          mapSegment (Cap (Arg (PathSegment name) _)) = "encodeURIComponent(String(" <> name <> "))"
+          mapSegment (Static (PathSegment s)) = "/" <> s
+          mapSegment (Cap (Arg (PathSegment name) (TsContext t _))) = "/\" + encodeURIComponent(" <> writeStringCast name t <> ") + \""
+
+          writeStringCast :: Text -> TsType -> Text
+          writeStringCast n t = case t of
+              TsString -> n
+              TsNullable a -> writeStringCast n a
+              _ -> "String(" <> n <> ")"
 
           writeTsType :: TsType -> Text
           writeTsType TsNever = "never"
@@ -126,6 +135,7 @@ writeCustomTypes m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey
             
           writeCustomType k (TsObject n ts) = ["\tinterface " <> n <> "\n" <> 
                                                "\t{\n" <>
+                                               Text.intercalate "\n" ((\(n, t) -> "\t\t" <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
                                                "\t}\n"]
 
           writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts

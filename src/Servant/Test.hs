@@ -48,14 +48,14 @@ import qualified Data.Text.IO as TIO
 
 import Data.Typeable
 
-data TestUnion = UnionA Int Int
+data TestUnion = UnionA { _a :: Int, _b :: Int }
                | UnionB Text Text
     deriving (Generic, Typeable, ToJSON, TsTypeable)
 
 type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
            :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
            :<|> "receipts" :> "query" :> QueryParam "x" Int :> QueryParam "y" Int :> Post '[JSON] Int
-           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" (Maybe Int) :> Get '[JSON] Int
+           :<|> "receiptt" :> Capture "x" Text :> QueryParam "x" (Maybe Text) :> Get '[JSON] Int
            :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] Int
            :<|> "union" :> Get '[JSON] TestUnion
 
