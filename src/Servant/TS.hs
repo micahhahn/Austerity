@@ -60,14 +60,17 @@ tsForAPI api = writeEndpoints $ listFromAPI (Proxy :: Proxy TypeScript) (Proxy :
 
 {- Using 'data' in jquery options potentially incorrect? -}
 
+tsCustomTypeName :: TypeRep -> Text
+tsCustomTypeName = sanitizeTSName . Text.pack . show . typeRepTyCon
+
 tsTypeName :: TsType -> Text 
 tsTypeName TsVoid = "void"
 tsTypeName TsNever = "never"
 tsTypeName TsBoolean = "boolean"
 tsTypeName TsNumber = "number"
 tsTypeName TsString = "string"
-tsTypeName (TsNullable t) = tsTypeName t <> "?"
-tsTypeName (TsRef t) = sanitizeTSName . Text.pack . show $ typeRepTyCon t 
+tsTypeName (TsNullable t) = tsTypeName t {- <> "?" -}
+tsTypeName (TsRef t) = tsCustomTypeName t 
 tsTypeName (TsArray t) = "Array<" <> tsTypeName t <> ">"
 
 writeEndpoint :: Req (TsContext TsType) -> TsContext Text
@@ -114,11 +117,29 @@ writeEndpoint t = do
           writeTsType (TsUnion ts) = Text.intercalate " | " (writeTsType <$> ts)
           writeTsType (TsNullable t) = (writeTsType t) <> " | null"
 
-writeEndpoints :: [Req (TsContext TsType)] -> Text
+writeCustomTypes :: Map TypeRep TsType -> Text
+writeCustomTypes m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey writeCustomType m
+    where writeCustomType :: TypeRep -> TsType -> [Text]
+          writeCustomType k (TsUnion ts) = let alias = "\ttype " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName <$> ts) <> ";\n"
+                                               types = concat $ writeCustomType k <$> ts
+                                            in alias : types
+            
+          writeCustomType k (TsObject n ts) = ["\tinterface " <> n <> "\n" <> 
+                                               "\t{\n" <>
+                                               "\t}\n"]
+
+          writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
+                                              in ["\ttype " <> n <> " = " <> "[" <> tuple <> "];\n"]
+
+          getConName :: TsType -> Text
+          getConName (TsObject n _) = n
+          getConName (TsTuple n _) = n
+
+writeEndpoints :: [Req (TsContext TsType)] -> Text 
 writeEndpoints ts = let (TsContext ts' m) = sequence (writeEndpoint <$> ts)
                      in "namespace Ajax\n" <>
                         "{\n" <>
-                        {- Text.intercalate "\n\n" (Map.elems m) <> "\n" <> -}
+                        writeCustomTypes m <> "\n" <>
                         Text.intercalate "\n\n" ts' <> "\n" <>
                         "}"
 
