@@ -14,7 +14,8 @@ module Servant.TS (
     TsTypeable(..),
     TypeScript(..),
     TsGenOptions(..),
-    TsStringQuotes(..)
+    TsGenQuotes(..),
+    TsGenIndent(..)
 ) where
 
 {- import Data.DList (DList) -}
@@ -57,12 +58,17 @@ data TypeScript
 instance (TsTypeable a) => HasForeignType TypeScript (TsContext TsType) a where
     typeFor _ _ p = tsTypeRep p
 
-data TsStringQuotes = TsStringSingleQuotes
-                    | TsStringDoubleQuotes
-                    deriving (Eq, Ord, Enum, Show)
+data TsGenQuotes = TsSingleQuotes
+                 | TsDoubleQuotes
+                 deriving (Eq, Ord, Enum, Show)
+
+data TsGenIndent = TsIndentTab
+                 | TsIndentSpaces Int
+                 deriving (Eq, Ord, Show)
 
 data TsGenOptions = TsGenOptions
-    { stringQuotes :: TsStringQuotes
+    { _quotes :: TsGenQuotes
+    , _indent :: TsGenIndent
     } deriving (Show)
 
 tsForAPI :: (HasForeign TypeScript (TsContext TsType) api, GenerateList (TsContext TsType) (Foreign (TsContext TsType) api)) => Proxy api -> TsGenOptions -> Text
@@ -84,12 +90,18 @@ tsTypeName (TsRef t) = tsCustomTypeName t
 tsTypeName (TsArray t) = "Array<" <> tsTypeName t <> ">"
 
 makeQuote :: TsGenOptions -> Text
-makeQuote opts = case stringQuotes opts of
-                     TsStringSingleQuotes -> "'"
-                     TsStringDoubleQuotes -> "\""
+makeQuote opts = case _quotes opts of
+                     TsSingleQuotes -> "'"
+                     TsDoubleQuotes -> "\""
+
+makeIndent :: TsGenOptions -> Text
+makeIndent opts = case _indent opts of
+                      TsIndentTab -> "\t"
+                      TsIndentSpaces n -> Text.pack . concat . take n . repeat $ " "
 
 writeEndpoint :: TsGenOptions -> Req (TsContext TsType) -> TsContext Text
 writeEndpoint opts t = do
+    let i' = makeIndent opts
     let functionName = mconcat . map Text.toTitle . unFunctionName . _reqFuncName $ t
     let method = TE.decodeUtf8 $ _reqMethod t
     successType <- maybe (return TsVoid) id (_reqReturnType t)
@@ -104,24 +116,24 @@ writeEndpoint opts t = do
     let queryArgs = if null q then [] else [("$query: {" <> Text.intercalate ", " ((\(l, r) -> l <> ": " <> tsTypeName r) <$> q) <> "}")]
 
     let checkArg (n, t) = let param = "$query." <> n
-                           in "\t\tif (" <> param <> " !== undefined)\n" <>
-                              "\t\t\t$queryArgs.push(" <> makeQuote opts <> n <> "=" <> makeQuote opts <> "+ encodeURIComponent(" <> writeStringCast param t <> "));\n"
+                           in i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
+                              i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> "=" <> makeQuote opts <> "+ encodeURIComponent(" <> writeStringCast param t <> "));\n"
 
     let queryPrepare = if null q then ""
-                                 else "\t\tlet $queryArgs : string[] = [];\n" <>
+                                 else i' <> i' <> "let $queryArgs : string[] = [];\n" <>
                                       Text.intercalate "\n" (checkArg <$> q) <> "\n" <>
-                                      "\t\tlet $queryString = $queryArgs.length == 0 ? " <> makeQuote opts <> makeQuote opts <> " : " <> makeQuote opts <> "?" <> makeQuote opts <> " + $queryArgs.join(" <> makeQuote opts <> "&" <> makeQuote opts <> ");\n\n"
+                                      i' <> i' <> "let $queryString = $queryArgs.length == 0 ? " <> makeQuote opts <> makeQuote opts <> " : " <> makeQuote opts <> "?" <> makeQuote opts <> " + $queryArgs.join(" <> makeQuote opts <> "&" <> makeQuote opts <> ");\n\n"
 
     let url = makeQuote opts <> (mconcat (mapSegment opts . unSegment <$> (_path . _reqUrl $ t))) <> makeQuote opts <>
               if null q then "" else " + $queryString"
 
     let args = captures ++ queryArgs ++ bodyArg ++ ["onSuccess: (result: " <> tsTypeName successType <> ") => void", "onError: () => void"]
     let jqueryArgs = [("url", url), ("success", "onSuccess"), ("error", "onError"), ("method", makeQuote opts <> method <> makeQuote opts)] ++ bodyJQueryArg
-    return $ "\texport function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
-             "\t{\n" <>
+    return $ i' <> "export function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
+             i' <> "{\n" <>
              queryPrepare <>
-             "\t\t$.ajax({\n\t\t\t" <> Text.intercalate ",\n\t\t\t" ((\(l, r) -> l <> ": " <> r) <$> jqueryArgs) <> "\n\t\t});\n" <>
-             "\t}"
+             i' <> i' <> "$.ajax({\n" <> i' <> i' <> i' <> Text.intercalate (",\n" <> i' <> i' <> i') ((\(l, r) -> l <> ": " <> r) <$> jqueryArgs) <> "\n" <> i' <> i' <> "});\n" <>
+             i' <> "}"
 
     where mapSegment :: TsGenOptions -> SegmentType (TsContext TsType) -> Text
           mapSegment _ (Static (PathSegment s)) = "/" <> s
@@ -141,20 +153,22 @@ writeEndpoint opts t = do
           writeTsType (TsUnion ts) = Text.intercalate " | " (writeTsType <$> ts)
           writeTsType (TsNullable t) = (writeTsType t) <> " | null"
 
-writeCustomTypes :: Map TypeRep TsType -> Text
-writeCustomTypes m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey writeCustomType m
-    where writeCustomType :: TypeRep -> TsType -> [Text]
-          writeCustomType k (TsUnion ts) = let alias = "\ttype " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName <$> ts) <> ";\n"
+writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
+writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey writeCustomType m
+    where i' = makeIndent opts
+        
+          writeCustomType :: TypeRep -> TsType -> [Text]
+          writeCustomType k (TsUnion ts) = let alias = i' <> "type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName <$> ts) <> ";\n"
                                                types = concat $ writeCustomType k <$> ts
                                             in alias : types
             
-          writeCustomType k (TsObject n ts) = ["\tinterface " <> n <> "\n" <> 
-                                               "\t{\n" <>
-                                               Text.intercalate "\n" ((\(n, t) -> "\t\t" <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
-                                               "\t}\n"]
+          writeCustomType k (TsObject n ts) = [i' <> "interface " <> n <> "\n" <> 
+                                               i' <> "{\n" <>
+                                               Text.intercalate "\n" ((\(n, t) -> i' <> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
+                                               i' <> "}\n"]
 
           writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                              in ["\ttype " <> n <> " = " <> "[" <> tuple <> "];\n"]
+                                              in [i' <> "type " <> n <> " = " <> "[" <> tuple <> "];\n"]
 
           getConName :: TsType -> Text
           getConName (TsObject n _) = n
@@ -164,7 +178,7 @@ writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
                          in "namespace Ajax\n" <>
                             "{\n" <>
-                            writeCustomTypes m <> "\n" <>
+                            writeCustomTypes opts m <> "\n" <>
                             Text.intercalate "\n\n" ts' <> "\n" <>
                             "}"
 
