@@ -54,7 +54,7 @@ data TestUnion = UnionA { _a :: Int, _b :: Int }
 
 type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
            :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
-           :<|> "receipts" :> "query" :> QueryParam "x" Int :> QueryParam "y" Int :> Post '[JSON] Int
+           :<|> "receipts" :> "query" :> QueryParam "x" Int :> QueryFlag "y" :> QueryParams "z" Int :> Post '[JSON] Int
            :<|> "receiptt" :> Capture "x" Text :> QueryParam "x" (Maybe Text) :> Get '[JSON] Int
            :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] Int
            :<|> "union" :> Get '[JSON] TestUnion

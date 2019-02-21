@@ -110,14 +110,19 @@ writeEndpoint opts t = do
     
     q <- sequence $ (\a -> do
                         t <- _argType . _queryArgName $ a
-                        return (unPathSegment . _argName . _queryArgName $ a, t)
+                        return (unPathSegment . _argName . _queryArgName $ a, t, _queryArgType a)
                     ) <$> (_queryStr . _reqUrl $ t)
     
-    let queryArgs = if null q then [] else [("$query: {" <> Text.intercalate ", " ((\(l, r) -> l <> ": " <> tsTypeName r) <$> q) <> "}")]
+    let queryArgs = if null q then [] else [("$query: {" <> Text.intercalate ", " ((\(n, t, _) -> n <> ": " <> tsTypeName t) <$> q) <> "}")]
 
-    let checkArg (n, t) = let param = "$query." <> n
-                           in i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
-                              i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> "=" <> makeQuote opts <> "+ encodeURIComponent(" <> writeStringCast param t <> "));\n"
+    let checkArg (n, t, at) = let param = "$query." <> n
+                               in case at of
+                                      Flag -> i' <> i' <> "if (" <> param <> " === true)\n" <>
+                                              i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> makeQuote opts <> ");\n"
+                                      Normal -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
+                                                i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> "=" <> makeQuote opts <> " + encodeURIComponent(" <> writeStringCast param t <> "));\n"
+                                      List -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
+                                              i' <> i' <> i' <> "$queryArgs.push(..." <> param <> ".map(x => " <> makeQuote opts <> n <> "=" <> makeQuote opts <> " + encodeURIComponent(" <> writeStringCast "x" t <> ")));\n"
 
     let queryPrepare = if null q then ""
                                  else i' <> i' <> "let $queryArgs : string[] = [];\n" <>
