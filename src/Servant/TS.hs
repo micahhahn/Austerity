@@ -118,22 +118,22 @@ writeEndpoint opts t = do
     let checkArg (n, t, at) = let param = "$query." <> n
                                in case at of
                                       Flag -> i' <> i' <> "if (" <> param <> " === true)\n" <>
-                                              i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> makeQuote opts <> ");\n"
+                                              i' <> i' <> i' <> "$queryArgs.push(" <> quote n <> ");\n"
                                       Normal -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
-                                                i' <> i' <> i' <> "$queryArgs.push(" <> makeQuote opts <> n <> "=" <> makeQuote opts <> " + encodeURIComponent(" <> writeStringCast param t <> "));\n"
+                                                i' <> i' <> i' <> "$queryArgs.push(" <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast param t <> "));\n"
                                       List -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
-                                              i' <> i' <> i' <> "$queryArgs.push(..." <> param <> ".map(x => " <> makeQuote opts <> n <> "=" <> makeQuote opts <> " + encodeURIComponent(" <> writeStringCast "x" t <> ")));\n"
+                                              i' <> i' <> i' <> "$queryArgs.push(..." <> param <> ".map(x => " <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast "x" t <> ")));\n"
 
     let queryPrepare = if null q then ""
-                                 else i' <> i' <> "let $queryArgs : string[] = [];\n" <>
+                                 else i' <> i' <> "let $queryArgs : string[] = [];\n\n" <>
                                       Text.intercalate "\n" (checkArg <$> q) <> "\n" <>
-                                      i' <> i' <> "let $queryString = $queryArgs.length == 0 ? " <> makeQuote opts <> makeQuote opts <> " : " <> makeQuote opts <> "?" <> makeQuote opts <> " + $queryArgs.join(" <> makeQuote opts <> "&" <> makeQuote opts <> ");\n\n"
+                                      i' <> i' <> "let $queryString = $queryArgs.length == 0 ? " <> quote "" <> " : " <> quote "?" <> " + $queryArgs.join(" <> quote "&" <> ");\n\n"
 
-    let url = makeQuote opts <> (mconcat (mapSegment opts . unSegment <$> (_path . _reqUrl $ t))) <> makeQuote opts <>
+    let url = quote (mconcat (mapSegment opts . unSegment <$> (_path . _reqUrl $ t))) <>
               if null q then "" else " + $queryString"
 
     let args = captures ++ queryArgs ++ bodyArg ++ ["onSuccess: (result: " <> tsTypeName successType <> ") => void", "onError: () => void"]
-    let jqueryArgs = [("url", url), ("success", "onSuccess"), ("error", "onError"), ("method", makeQuote opts <> method <> makeQuote opts)] ++ bodyJQueryArg
+    let jqueryArgs = [("url", url), ("success", "onSuccess"), ("error", "onError"), ("method", quote method)] ++ bodyJQueryArg
     return $ i' <> "export function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
              i' <> "{\n" <>
              queryPrepare <>
@@ -157,6 +157,9 @@ writeEndpoint opts t = do
           writeTsType TsString = "string"
           writeTsType (TsUnion ts) = Text.intercalate " | " (writeTsType <$> ts)
           writeTsType (TsNullable t) = (writeTsType t) <> " | null"
+
+          quote :: Text -> Text
+          quote s = makeQuote opts <> s <> makeQuote opts
 
 writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
 writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey writeCustomType m
