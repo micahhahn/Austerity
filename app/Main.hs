@@ -52,15 +52,29 @@ import Data.Aeson
 import Servant.TS
 import qualified Data.Text.IO as TIO
 
-type InnerApi = "receipts" :> Get '[JSON] [Int]
+import Data.Typeable
+
+type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
            :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
-           :<|> "receipts" :> "query" :> QueryParam "y" Text :> Post '[JSON] Int
-           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" Int :> Get '[JSON] Int
-           :<|> "receipt" :> "body" :> ReqBody '[JSON] Int :> Get '[JSON] Int
- 
+           :<|> "receipts" :> "query" :> QueryParam "x" Int :> QueryParam "y" Int :> Post '[JSON] Int
+           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" (Maybe Int) :> Get '[JSON] Int
+           :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] Int
+
+handler :: Maybe (FullReceipt' Identity) -> Handler Int
+handler _ = return 7
+
+h__ :: Server InnerApi
+h__ = return undefined
+ :<|> return undefined
+ :<|> return undefined
+ :<|> return undefined
+ :<|> return undefined
+
+h = serve (Proxy :: Proxy InnerApi) h__
+
 g = do
     let t = tsForAPI (Proxy :: Proxy InnerApi)
-    TIO.writeFile "C:/Users/MicahH/Source/Austerity/build/Endpoints.ts" t
+    TIO.writeFile "C:/Users/Micah/Source/Austerity/build/Endpoints.ts" (t undefined)
 
 type AusterityHome = "home" :> Get '[HTML] (Html ())
 type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
@@ -89,6 +103,7 @@ defaultFullReceiptError :: FullReceiptError
 defaultFullReceiptError = FullReceipt' 
     { date = Const ("", Nothing)
     , vendor = Const ("", Nothing)
+    , items = []
     , amount = Const ("", Nothing)
     }
 
@@ -210,6 +225,9 @@ data FullReceipt' a = FullReceipt'
 type FullReceipt = FullReceipt' Identity
 deriving instance Show FullReceipt
 deriving instance Generic FullReceipt
+deriving instance TsTypeable FullReceipt
+deriving instance ToJSON FullReceipt
+deriving instance FromJSON FullReceipt
 
 {- The type to be marshalled from the body of an HTTP request -}
 type FullReceiptForm = FullReceipt' (Const Text)

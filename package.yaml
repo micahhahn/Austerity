@@ -61,6 +61,15 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - Austerity
+  TypescriptBridge:
+    main:                Main.hs
+    source-dirs:         typescript-bridge
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Austerity
 
 tests:
   Austerity-test:

@@ -21,6 +21,7 @@ module Servant.TS (
 {- import Data.DList (DList) -}
 import Data.Fixed (Fixed, HasResolution)
 import Data.Functor.Compose (Compose)
+import Data.Functor.Const (Const)
 import Data.Functor.Identity (Identity)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.IntSet (IntSet)
@@ -184,11 +185,8 @@ writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWi
 
 writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text 
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
-                         in "namespace Ajax\n" <>
-                            "{\n" <>
-                            writeCustomTypes opts m <> "\n" <>
-                            Text.intercalate "\n\n" ts' <> "\n" <>
-                            "}"
+                         in writeCustomTypes opts m <> "\n" <>
+                            Text.intercalate "\n\n" ts' <> "\n"
 
 data TsType = TsVoid
             | TsNever
@@ -258,7 +256,7 @@ instance (TsSelector a, TsSelector b) => TsSelector (a :*: b) where
         r <- tsSelector (undefined :: b f)
         return $ l ++ r
 
-instance (Selector a, TsTypeable c) => TsSelector (S1 a (K1 b c)) where
+instance (Selector a, TsTypeable c, Typeable c) => TsSelector (S1 a (K1 b c)) where
     tsSelector q@(M1 (K1 t)) = do
         tsType <- tsTypeRep (Proxy :: Proxy c)
         return [(Text.pack . selName $ q, tsType)]
@@ -363,6 +361,9 @@ instance (TsType a) => TsType (DList a) where
 -}
 
 instance (TsTypeable a) => TsTypeable (Identity a) where
+    tsTypeRep _ = tsTypeRep (Proxy :: Proxy a)
+
+instance (TsTypeable a) => TsTypeable (Const a b) where
     tsTypeRep _ = tsTypeRep (Proxy :: Proxy a)
 
 {-

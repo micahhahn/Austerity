@@ -1,4 +1,5 @@
 import * as React from 'react';
+import * as Ajax from '../../../build/Endpoints'
 
 interface IFullReceipt
 {
@@ -51,7 +52,7 @@ export class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt
     }
 
     submit = (e: React.MouseEvent<HTMLElement>) => {
-        
+        Ajax.PostReceiptNew()
     }
 
     public render() {
