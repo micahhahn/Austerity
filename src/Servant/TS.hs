@@ -119,28 +119,28 @@ writeEndpoint opts t = do
 
     let checkArg (n, t, at) = let param = "$query." <> n
                                in case at of
-                                      Flag -> i' <> i' <> "if (" <> param <> " === true)\n" <>
-                                              i' <> i' <> i' <> "$queryArgs.push(" <> quote n <> ");\n"
-                                      Normal -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
-                                                i' <> i' <> i' <> "$queryArgs.push(" <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast param t <> "));\n"
-                                      List -> i' <> i' <> "if (" <> param <> " !== undefined)\n" <>
-                                              i' <> i' <> i' <> "$queryArgs.push(..." <> param <> ".map(x => " <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast "x" t <> ")));\n"
+                                      Flag -> i' <> "if (" <> param <> " === true)\n" <>
+                                              i' <> i' <> "$queryArgs.push(" <> quote n <> ");\n"
+                                      Normal -> i' <> "if (" <> param <> " !== undefined)\n" <>
+                                                i' <> i' <> "$queryArgs.push(" <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast param t <> "));\n"
+                                      List -> i' <> "if (" <> param <> " !== undefined)\n" <>
+                                              i' <> i' <> "$queryArgs.push(..." <> param <> ".map(x => " <> quote (n <> "=") <> " + encodeURIComponent(" <> writeStringCast "x" t <> ")));\n"
 
     let queryPrepare = if null q then ""
-                                 else i' <> i' <> "let $queryArgs : string[] = [];\n\n" <>
+                                 else i' <> "let $queryArgs : string[] = [];\n\n" <>
                                       Text.intercalate "\n" (checkArg <$> q) <> "\n" <>
-                                      i' <> i' <> "let $queryString = $queryArgs.length == 0 ? " <> quote "" <> " : " <> quote "?" <> " + $queryArgs.join(" <> quote "&" <> ");\n\n"
+                                      i' <> "let $queryString = $queryArgs.length == 0 ? " <> quote "" <> " : " <> quote "?" <> " + $queryArgs.join(" <> quote "&" <> ");\n\n"
 
     let url = quote (mconcat (mapSegment opts . unSegment <$> (_path . _reqUrl $ t))) <>
               if null q then "" else " + $queryString"
 
     let args = captures ++ queryArgs ++ bodyArg ++ ["onSuccess: (result: " <> tsTypeName successType <> ") => void", "onError: () => void"]
     let jqueryArgs = [("url", url), ("success", "onSuccess"), ("error", "onError"), ("method", quote method)] ++ bodyJQueryArg
-    return $ i' <> "export function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
-             i' <> "{\n" <>
+    return $ "export function " <> functionName <> "(" <> Text.intercalate ", " args <> "): void\n" <>
+             "{\n" <>
              queryPrepare <>
-             i' <> i' <> "$.ajax({\n" <> i' <> i' <> i' <> Text.intercalate (",\n" <> i' <> i' <> i') ((\(l, r) -> l <> ": " <> r) <$> jqueryArgs) <> "\n" <> i' <> i' <> "});\n" <>
-             i' <> "}"
+             i' <> "$.ajax({\n" <> i' <> i' <> Text.intercalate (",\n" <> i' <> i') ((\(l, r) -> l <> ": " <> r) <$> jqueryArgs) <> "\n" <> i' <> "});\n" <>
+             "}"
 
     where mapSegment :: TsGenOptions -> SegmentType (TsContext TsType) -> Text
           mapSegment _ (Static (PathSegment s)) = "/" <> s
@@ -172,13 +172,13 @@ writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWi
                                                types = concat $ writeCustomType k <$> ts
                                             in alias : types
             
-          writeCustomType k (TsObject n ts) = [i' <> "interface " <> makeQualifiedType n k <> "\n" <> 
-                                               i' <> "{\n" <>
-                                               Text.intercalate "\n" ((\(n, t) -> i' <> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
-                                               i' <> "}\n"]
+          writeCustomType k (TsObject n ts) = ["interface " <> makeQualifiedType n k <> "\n" <> 
+                                               "{\n" <>
+                                               Text.intercalate "\n" ((\(n, t) -> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
+                                               "}\n"]
 
           writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                              in [i' <> "type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
+                                              in ["type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
