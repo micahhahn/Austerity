@@ -23,10 +23,11 @@ module.exports = {
         rules: [
             // All files with a '.ts' or '.tsx' extension will be handled by 'awesome-typescript-loader'.
             { 
-                test: /\.ts|\.tsx?$/, 
+                test: /\.ts|\.tsx$/, 
                 loader: "awesome-typescript-loader",
                 include: [
-                    path.resolve(__dirname, "web/")
+                    path.resolve(__dirname, "web/"),
+                    path.resolve(__dirname, "build/")
                 ]
             },
 

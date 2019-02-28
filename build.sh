@@ -6,7 +6,7 @@ stack build
 cp $(stack path --dist-dir)/build/Austerity-exe/Austerity-exe.exe dist/Austerity.exe
 
 # Build Typescript Bridge
-stack exec TypescriptBridge
+stack exec TypescriptBridge $(stack path project-root)/build/Endpoints.ts
 
 # Webpack
 npm run build

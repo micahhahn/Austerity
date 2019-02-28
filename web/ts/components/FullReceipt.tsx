@@ -52,7 +52,7 @@ export class FullReceipt extends React.Component<IFullReceiptProps, IFullReceipt
     }
 
     submit = (e: React.MouseEvent<HTMLElement>) => {
-        Ajax.PostReceiptNew()
+        Ajax.GetReceipts(rs => {}, () => {});
     }
 
     public render() {
