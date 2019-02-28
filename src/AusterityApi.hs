@@ -34,9 +34,8 @@ data FullReceipt' a = FullReceipt'
     , amount :: a Double
     }
 
-data BasicPolymorphicType a = BasicPolymophicType a
+data BasicPolymorphicType a = BasicPolymorphicType a
     deriving (Generic, Typeable, TsTypeable)
-
 
 type FullReceipt = FullReceipt' Identity
 deriving instance Show FullReceipt

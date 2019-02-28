@@ -78,7 +78,8 @@ tsForAPI api opts = writeEndpoints opts $ listFromAPI (Proxy :: Proxy TypeScript
 {- Using 'data' in jquery options potentially incorrect? -}
 
 tsCustomTypeName :: TypeRep -> Text
-tsCustomTypeName = sanitizeTSName . Text.pack . show . typeRepTyCon
+tsCustomTypeName t = let tn = sanitizeTSName . Text.pack . tyConName . typeRepTyCon $ t
+                      in Text.intercalate "_" (tn : (tsCustomTypeName <$> typeRepArgs t))
 
 tsTypeName :: TsType -> Text 
 tsTypeName TsVoid = "void"
@@ -167,21 +168,24 @@ writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWi
     where i' = makeIndent opts
         
           writeCustomType :: TypeRep -> TsType -> [Text]
-          writeCustomType k (TsUnion ts) = let alias = i' <> "type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName <$> ts) <> ";\n"
+          writeCustomType k (TsUnion ts) = let alias = i' <> "type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName k <$> ts) <> ";\n"
                                                types = concat $ writeCustomType k <$> ts
                                             in alias : types
             
-          writeCustomType k (TsObject n ts) = [i' <> "interface " <> n <> "\n" <> 
+          writeCustomType k (TsObject n ts) = [i' <> "interface " <> makeQualifiedType n k <> "\n" <> 
                                                i' <> "{\n" <>
                                                Text.intercalate "\n" ((\(n, t) -> i' <> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
                                                i' <> "}\n"]
 
           writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                              in [i' <> "type " <> n <> " = " <> "[" <> tuple <> "];\n"]
+                                              in [i' <> "type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
 
-          getConName :: TsType -> Text
-          getConName (TsObject n _) = n
-          getConName (TsTuple n _) = n
+          makeQualifiedType :: Text -> TypeRep -> Text
+          makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
+
+          getConName :: TypeRep -> TsType -> Text
+          getConName t (TsObject n _) = makeQualifiedType n t
+          getConName t (TsTuple n _) = makeQualifiedType n t
 
 writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text 
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
