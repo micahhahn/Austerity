@@ -168,17 +168,17 @@ writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWi
     where i' = makeIndent opts
         
           writeCustomType :: TypeRep -> TsType -> [Text]
-          writeCustomType k (TsUnion ts) = let alias = i' <> "type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName k <$> ts) <> ";\n"
+          writeCustomType k (TsUnion ts) = let alias = i' <> "export type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName k <$> ts) <> ";\n"
                                                types = concat $ writeCustomType k <$> ts
                                             in alias : types
             
-          writeCustomType k (TsObject n ts) = ["interface " <> makeQualifiedType n k <> "\n" <> 
+          writeCustomType k (TsObject n ts) = ["export interface " <> makeQualifiedType n k <> "\n" <> 
                                                "{\n" <>
                                                Text.intercalate "\n" ((\(n, t) -> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
                                                "}\n"]
 
           writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                              in ["type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
+                                              in ["export type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
