@@ -32,6 +32,7 @@
     "webpack-cli": "^3.2.1"
   },
   "dependencies": {
-    "@types/jquery": "^3.3.29"
+    "@types/jquery": "^3.3.29",
+    "jquery": "^3.3.1"
   }
 }

@@ -1,6 +1,8 @@
 import * as React from 'react';
+
 import { render } from 'react-dom';
 import App from './components/App';
+import * as Ajax from '../../build/Endpoints';
 import {FullReceipt, IFullReceiptProps} from './components/FullReceipt';
 
 declare global {
@@ -9,8 +11,11 @@ declare global {
 
 window.Austerity = window.Austerity || (() => {
     return {
-        renderFullReceipt: (root: HTMLElement, props: IFullReceiptProps) => {
-            render(React.createElement(FullReceipt, props), root)
+        bootstrapApp: (root: HTMLElement) => {
+            Ajax.GetReceipts(rs => {
+                render(React.createElement(App, { receipts: rs }), root);
+            }, () => {});
+            
         }
     };
 })();

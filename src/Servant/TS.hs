@@ -189,7 +189,8 @@ writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWi
 
 writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text 
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
-                         in writeCustomTypes opts m <> "\n" <>
+                         in "import * as $ from 'jquery';\n\n" <> 
+                            writeCustomTypes opts m <> "\n" <>
                             Text.intercalate "\n\n" ts' <> "\n"
 
 data TsType = TsVoid

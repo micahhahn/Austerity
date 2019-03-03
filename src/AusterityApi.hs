@@ -24,7 +24,8 @@ import Servant.TS
 type AusterityApi = "receipts" :> Get '[JSON] [FullReceipt]
 
 data FullReceipt' a = FullReceipt'
-    { date :: a LocalTime
+    { receiptId :: a Int
+    , date :: a LocalTime
     , vendor :: a Int
     , amount :: a Double
     }

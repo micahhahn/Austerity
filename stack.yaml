@@ -50,8 +50,8 @@ extra-deps:
     commit: e6e3f5edac45534c98beede2d21acac5eff889d7
   - git: https://github.com/micahhahn/haskell-opaleye
     commit: e2c9de884717475834ec32ea155c21c39fc68017
-  - git: https://github.com/tathougies/beam
-    commit: a65739e77e485c5695a8591b2b231a85ccd6a3ab
+  - git: https://github.com/micahhahn/beam
+    commit: a8bf25cba2eb1dbdea38d29c263b0d3db0bd8510
     subdirs:
       - beam-core/
       - beam-sqlite/

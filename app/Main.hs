@@ -53,39 +53,11 @@ import Servant.TS
 import qualified Data.Text.IO as TIO
 
 import Data.Typeable
+import AusterityApi
 
-type InnerApi = "receipts" :> Get '[JSON] [FullReceipt]
-           :<|> "receipt" :> Capture "x" Int :> Get '[JSON] Int
-           :<|> "receipts" :> "query" :> QueryParam "x" Int :> QueryParam "y" Int :> Post '[JSON] Int
-           :<|> "receiptt" :> Capture "x" Int :> QueryParam "x" (Maybe Int) :> Get '[JSON] Int
-           :<|> "receipt" :> "body" :> ReqBody '[JSON] FullReceipt :> Get '[JSON] Int
-
-handler :: Maybe (FullReceipt' Identity) -> Handler Int
-handler _ = return 7
-
-h__ :: Server InnerApi
-h__ = return undefined
- :<|> return undefined
- :<|> return undefined
- :<|> return undefined
- :<|> return undefined
-
-h = serve (Proxy :: Proxy InnerApi) h__
-
-g = do
-    let t = tsForAPI (Proxy :: Proxy InnerApi)
-    TIO.writeFile "C:/Users/Micah/Source/Austerity/build/Endpoints.ts" (t undefined)
-
-type AusterityHome = "home" :> Get '[HTML] (Html ())
-type AusterityReceiptsNewGet = "receipts" :> "new" :> Get '[HTML] (Html ())
-type AusterityReceiptsNewPost = "receipts" :> "new" :> ReqBody '[FormUrlEncoded] FullReceiptForm :> Post '[HTML] (Html ())
-
-type AusterityJSTest = "receipts" :> "new" :> ReqBody '[JSON] FullReceiptForm :> Post '[JSON] FullReceiptError
-
-type AusterityApi = AusterityHome
-               :<|> AusterityReceiptsNewGet
-               :<|> AusterityReceiptsNewPost
-               :<|> "static" :> Raw
+type GlobalApi = AusterityApi
+            :<|> Get '[HTML] (Html ())
+            :<|> "static" :> Raw
 
 home :: Html ()
 home = do
@@ -93,47 +65,39 @@ home = do
         html_ $ do
             head_ $ do
                 title_ "Austerity"
+                link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/bootstrap.css"]
+                link_ [type_ "text/css", rel_ "stylesheet", href_ "/static/styles/site.css"]
+                script_ [src_ "/static/scripts/bundle.js"] ("" :: Text)
             body_ $ do
-                p_ "Welcome to Austerity"
-                form_ [action_ "import", method_ "post", enctype_ "multipart/form-data"] $ do
-                    input_ [type_ "file", name_ "file"]
-                    input_ [type_ "submit", value_ "Import"]
+                bootstrapReact
 
-defaultFullReceiptError :: FullReceiptError
-defaultFullReceiptError = FullReceipt' 
-    { date = Const ("", Nothing)
-    , vendor = Const ("", Nothing)
-    , items = []
-    , amount = Const ("", Nothing)
-    }
-
-type family Props a where
-    Props FullReceipt = FullReceiptProps
-
-data FullReceiptProps = FullReceiptProps
-    { vendors :: [VendorProps]
-    } deriving (Generic)
- 
-deriving instance ToJSON FullReceiptProps
-
-data VendorProps = VendorProps
-    { vendorId :: Text
-    , vendorName :: Text
-    } deriving (Generic)
-
-deriving instance ToJSON VendorProps
-
-getProps :: [Beam.Vendor] -> FullReceiptProps
+{- getProps :: [Beam.Vendor] -> FullReceiptProps
 getProps vs = FullReceiptProps $ (\v -> VendorProps (Text.pack . show . Beam._vendor_VendorId $ v) (Beam._vendor_Name v)) <$> vs
+-}
 
-bootstrapReact :: (ToJSON a) => a -> Text -> Html ()
-bootstrapReact props typeName = do
+bootstrapReact :: Html ()
+bootstrapReact = do
     div_ [id_ "content"] ""
-    script_ [type_ "text/javascript"] $
-        "const props = " <> (TE.decodeUtf8 . L.toStrict . encode $ props) <> ";\n" <>
-        "Austerity.render" <> typeName <> "(document.getElementById('content'), props);"
+    script_ [type_ "text/javascript"] ("Austerity.bootstrapApp(document.getElementById('content'));" :: Text)
 
-newReceipt :: SS.Connection -> Handler (Html ())
+x = do
+    conn <- SS.open "C:/Users/Micah/Desktop/Austerity.db"
+    BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.all_ (Beam._receipts Beam.austerityDb)
+    
+getReceipts :: SS.Connection -> Handler [FullReceipt]
+getReceipts conn = do
+    receipts <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.all_ (Beam._receipts Beam.austerityDb)
+    return $ (\r -> let receiptId = Beam._receipt_ReceiptId r
+                        date = Beam._receipt_Date r
+                        (Beam.VendorId vendorId) = Beam._receipt_Vendor r
+                        amount = Beam._receipt_Amount r
+                     in FullReceipt' { receiptId = (Identity receiptId)
+                                     , date = (Identity date)
+                                     , vendor = (Identity vendorId)
+                                     , amount = (Identity amount)
+                                     }) <$> receipts
+
+{-newReceipt :: SS.Connection -> Handler (Html ())
 newReceipt conn = do
     vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
     liftIO . Prelude.putStrLn . show . encode . getProps $ vendors
@@ -148,7 +112,7 @@ newReceipt conn = do
 
                 body_ $ do
                     p_ "Create new Receipt"
-                    bootstrapReact (getProps vendors) "FullReceipt"
+                    bootstrapReact (getProps vendors) "FullReceipt" -}
 
 fullReceiptForm :: FullReceiptError -> [Beam.Vendor] -> Html ()
 fullReceiptForm receipt vendors = do
@@ -182,7 +146,7 @@ fullReceiptForm receipt vendors = do
               Nothing -> pure ()
               Just e -> div_ [class_ "invalid-feedback"] $ toHtml e
 
-newReceiptPost :: SS.Connection -> FullReceiptForm -> Handler (Html ())
+{- newReceiptPost :: SS.Connection -> FullReceiptForm -> Handler (Html ())
 newReceiptPost conn r = case validateFullReceipt r of
     Left f -> do
         vendors <- liftIO $ BS.runBeamSqlite conn $ B.runSelectReturningList $ B.select $ B.orderBy_ (\v -> B.asc_ $ Beam._vendor_Name v) $ B.all_ (Beam._vendors Beam.austerityDb)
@@ -196,12 +160,12 @@ newReceiptPost conn r = case validateFullReceipt r of
                     body_ $ do
                         p_ "Create new Receipt"
                         fullReceiptForm f vendors
-    Right f -> return $ doctypehtml_ "Actually insert"
+    Right f -> return $ doctypehtml_ "Actually insert" -}
     
 dateFormat :: String
 dateFormat = "%m/%d/%Y %I:%M %p"
 
-validateFullReceipt :: FullReceiptForm -> Either FullReceiptError FullReceipt
+{- validateFullReceipt :: FullReceiptForm -> Either FullReceiptError FullReceipt
 validateFullReceipt form = let mdate = parseTimeM False defaultTimeLocale dateFormat (Text.unpack . getConst . date $ form) :: Maybe LocalTime
                                mvendor = readMaybe (Text.unpack . getConst . vendor $ form) :: Maybe Int
                                mamount = readMaybe (Text.unpack . getConst . amount $ form) :: Maybe Double
@@ -211,31 +175,9 @@ validateFullReceipt form = let mdate = parseTimeM False defaultTimeLocale dateFo
                                Nothing -> Left $ FullReceipt'
                                             { date = Const (getConst $ date form, maybe (Just "The date must be the format 01/01/2000 12:00 AM") (const Nothing) mdate)
                                             , vendor = Const (getConst $ vendor form, maybe (Just "You must choose a vendor") (const Nothing) mvendor)
-                                            , items = [Const ("1", Nothing)]
                                             , amount = Const (getConst $ amount form, maybe (Just "Must be in the format 100.00") (const Nothing) mamount)
-                                            } 
+                                            } -}
 
-data FullReceipt' a = FullReceipt'
-    { date :: a LocalTime
-    , vendor :: a Int
-    , items :: [a Int]
-    , amount :: a Double
-    }
-
-type FullReceipt = FullReceipt' Identity
-deriving instance Show FullReceipt
-deriving instance Generic FullReceipt
-deriving instance TsTypeable FullReceipt
-deriving instance ToJSON FullReceipt
-deriving instance FromJSON FullReceipt
-
-{- The type to be marshalled from the body of an HTTP request -}
-type FullReceiptForm = FullReceipt' (Const Text)
-deriving instance Show FullReceiptForm
-deriving instance Generic FullReceiptForm
-deriving instance FromForm FullReceiptForm
-
-{-  -}
 type FullReceiptError = FullReceipt' (Const (Text, Maybe Text))
 deriving instance Show FullReceiptError 
 
@@ -273,14 +215,12 @@ import' md = do
                     pdfs
 -}
 
-server :: SS.Connection -> Server AusterityApi
-server conn = return home
-    :<|> newReceipt conn
-    :<|> newReceiptPost conn 
-    :<|> serveDirectoryFileServer "C:/Users/Micah/Source/Austerity/dist/static"
+server :: SS.Connection -> Server GlobalApi
+server conn = getReceipts conn
+         :<|> return home
+         :<|> serveDirectoryFileServer "C:/Users/Micah/Source/Austerity/dist/static"
 
 main :: IO ()
 main = do
-    Prelude.putStrLn . Text.unpack $ jsForAPI (Proxy :: Proxy AusterityJSTest) jquery
     conn <- SS.open "C:/Users/Micah/Desktop/Austerity.db"
-    run 8080 (serve (Proxy :: Proxy AusterityApi) (server conn))
+    run 8080 (serve (Proxy :: Proxy GlobalApi) (server conn))
