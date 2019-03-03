@@ -22,20 +22,12 @@ import Servant
 import Servant.TS
 
 type AusterityApi = "receipts" :> Get '[JSON] [FullReceipt]
-               :<|> "receipt" :> "new" :> ReqBody '[JSON] FullReceiptForm :> Post '[JSON] FullReceiptForm
-               :<|> "receipt" :> Capture "id" Int :> Get '[JSON] FullReceipt
-               :<|> "polymorphic1" :> Get '[JSON] (BasicPolymorphicType Int)
-               :<|> "polymorphic2" :> Get '[JSON] (BasicPolymorphicType Text)
 
 data FullReceipt' a = FullReceipt'
     { date :: a LocalTime
     , vendor :: a Int
-    , items :: [a Int]
     , amount :: a Double
     }
-
-data BasicPolymorphicType a = BasicPolymorphicType a
-    deriving (Generic, Typeable, TsTypeable)
 
 type FullReceipt = FullReceipt' Identity
 deriving instance Show FullReceipt
@@ -50,8 +42,3 @@ deriving instance Generic FullReceiptForm
 deriving instance Typeable FullReceiptForm
 deriving instance TsTypeable FullReceiptForm
 deriving instance ToJSON FullReceiptForm
-
-sampleForm = FullReceipt' (Const "date") (Const "vendor") [] (Const "amount") :: FullReceiptForm
-
-newtype FullReceiptForm' = FullReceiptForm' { unFullReceiptForm :: FullReceiptForm }
-    deriving (Show, Generic, Typeable, TsTypeable, ToJSON)
