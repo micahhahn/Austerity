@@ -87,6 +87,7 @@ tsTypeName TsNever = "never"
 tsTypeName TsBoolean = "boolean"
 tsTypeName TsNumber = "number"
 tsTypeName TsString = "string"
+tsTypeName (TsLiteral n) = n
 tsTypeName (TsStringLiteral n) = "\"" <> n <> "\""
 tsTypeName (TsNullable t) = tsTypeName t {- <> "?" -}
 tsTypeName (TsRef t) = tsCustomTypeName t 
@@ -159,7 +160,7 @@ writeEndpoint opts t = do
           writeTsType TsNumber = "number"
           writeTsType TsString = "string"
           writeTsType (TsStringLiteral n) = "\"" <> n <> "\"" 
-          writeTsType (TsUnion _ ts) = Text.intercalate " | " (writeTsType <$> ts)
+          {- writeTsType (TsTaggedUnion _ ts) = Text.intercalate " | " (writeTsType <$> ts) -}
           writeTsType (TsNullable t) = (writeTsType t) <> " | null"
 
           quote :: Text -> Text
@@ -171,31 +172,21 @@ writeCustomTypes opts m = Text.intercalate "\n" . Map.elems $ Map.mapWithKey wri
         
           writeCustomType :: TypeRep -> TsType -> Text
           writeCustomType tr t = let prefix = "export type " <> tsCustomTypeName tr
-                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) Nothing t <> ";\n"
+                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) t <> ";\n"
                                                 
-          writeMap :: (a -> Text) -> [(Text, a)] -> Text
-          writeMap f = ("{ " <> ) . (<> " }") . Text.intercalate ", " . fmap (\(n, t) -> n <> ": " <> f t)
-
-          writeCustomTypeDef :: Int -> Maybe Text -> TsType -> Text
-          writeCustomTypeDef i _ (TsUnion tn ts) = Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i (Just tn) <$> ts)
+          writeCustomTypeDef :: Int -> TsType -> Text
+          writeCustomTypeDef i (TsTaggedUnion tn ts) = let sts = \t -> case t of
+                                                                           (n, (TsObject ts')) -> TsObject ((tn, TsStringLiteral n) : ts')
+                                                                           (n, (TsTuple ts')) -> TsObject [(tn, TsStringLiteral n), ("contents", TsLiteral (writeCustomTypeDef i (TsTuple ts')))]
+                                                        in Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i . sts <$> ts)
           
-          writeCustomTypeDef _ tn (TsObject n ts) = let ts' = case tn of
-                                                                Just tn' -> (tn', TsStringLiteral n) : ts
-                                                                Nothing -> ts 
-                                                     in writeMap tsTypeName ts'
+          writeCustomTypeDef _ (TsObject ts) = "{ " <> Text.intercalate ", " ((\(n, t) -> n <> ": " <> tsTypeName t) <$> ts) <> " }"
 
-          writeCustomTypeDef _ tn (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                                       tupleWrap = if length ts == 1 then tuple else "[" <> tuple <> "]"
-                                                    in case tn of
-                                                           Just tn' -> writeMap id [(tn', "\"" <> n <> "\""), ("contents", tupleWrap)]
-                                                           Nothing -> tupleWrap
+          writeCustomTypeDef _ (TsTuple ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
+                                               in if length ts == 1 then tuple else "[" <> tuple <> "]"
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
-
-          getConName :: TypeRep -> TsType -> Text
-          getConName t (TsObject n _) = makeQualifiedType n t
-          getConName t (TsTuple n _) = makeQualifiedType n t
 
 writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text 
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
@@ -208,12 +199,13 @@ data TsType = TsVoid
             | TsBoolean
             | TsNumber
             | TsString
+            | TsLiteral Text
             | TsStringLiteral Text
-            | TsUnion Text {- tag field name -} [TsType]
+            | TsTaggedUnion Text {- tag field name -} [(Text, TsType)]
             | TsNullable TsType
             | TsArray TsType
-            | TsObject Text [(Text, TsType)]
-            | TsTuple Text [TsType]
+            | TsObject [(Text, TsType)]
+            | TsTuple [TsType]
             | TsRef TypeRep
     deriving (Show)
 
@@ -243,12 +235,12 @@ class TsDatatype a where
 instance (Datatype a, TsConstructor c) => TsDatatype (D1 a c) where
     tsDatatype c@(M1 r) t = do
         cons <- tsConstructor r
-        let tsType = if length cons == 1 then head cons
-                                         else TsUnion "tag" cons
+        let tsType = if length cons == 1 then snd . head $ cons
+                                         else TsTaggedUnion "tag" cons
         TsContext (TsRef t) (Map.insert t tsType Map.empty)
 
 class TsConstructor a where
-    tsConstructor :: a p -> TsContext [TsType]
+    tsConstructor :: a p -> TsContext [(Text, TsType)]
 
 instance (TsConstructor a, TsConstructor b) => TsConstructor (a :+: b) where
     tsConstructor (_ :: (a :+: b) f) = do
@@ -260,8 +252,8 @@ instance (Constructor a, TsSelector c) => TsConstructor (C1 a c) where
     tsConstructor c@(M1 r) = do
         sels <- tsSelector r
         let n = sanitizeTSName . Text.pack . conName $ c
-        let tsType = if conIsRecord c then TsObject n sels else TsTuple n (snd <$> sels)
-        return [tsType]
+        let tsType = if conIsRecord c then TsObject sels else TsTuple (snd <$> sels)
+        return [(n, tsType)]
 
 class TsSelector a where
     tsSelector :: a p -> TsContext [(Text, TsType)]
@@ -359,6 +351,11 @@ instance TsTypeable Version where
 
 instance (TsTypeable a) => TsTypeable (Maybe a) where
     tsTypeRep _ = TsNullable <$> (tsTypeRep (Proxy :: Proxy a))
+
+{-
+instance (TsTypeable a, TsTypeable b) => TsTypeable (Either a b) where
+    tsTypeRep _ = return TsUnion 
+-}
 
 instance (TsTypeable a) => TsTypeable [a] where
     tsTypeRep _ = TsArray <$> (tsTypeRep (Proxy :: Proxy a))
