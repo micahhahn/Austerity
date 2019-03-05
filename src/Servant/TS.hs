@@ -25,6 +25,7 @@ import Data.Functor.Const (Const)
 import Data.Functor.Identity (Identity)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.IntSet (IntSet)
+import Data.List (groupBy, sortBy)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -77,9 +78,14 @@ tsForAPI api opts = writeEndpoints opts $ listFromAPI (Proxy :: Proxy TypeScript
 
 {- Using 'data' in jquery options potentially incorrect? -}
 
+tsUnqualifiedCustomTypeName :: TypeRep -> Text
+tsUnqualifiedCustomTypeName t = let tn = sanitizeTSName . Text.pack . tyConName . typeRepTyCon $ t
+                                 in Text.intercalate "_" (tn : (tsUnqualifiedCustomTypeName <$> typeRepArgs t))
+
 tsCustomTypeName :: TypeRep -> Text
 tsCustomTypeName t = let tn = sanitizeTSName . Text.pack . tyConName . typeRepTyCon $ t
-                      in Text.intercalate "_" (tn : (tsCustomTypeName <$> typeRepArgs t))
+                         mn = sanitizeTSName . Text.pack . tyConModule . typeRepTyCon $ t
+                      in Text.intercalate "_" ((mn <> "." <> tn) : (tsUnqualifiedCustomTypeName <$> typeRepArgs t))
 
 tsTypeName :: TsType -> Text 
 tsTypeName TsVoid = "void"
@@ -173,31 +179,38 @@ untagUnion (TsTaggedUnion tn ts) = TsUnion $ (\(n, t) -> case t of
                                              ) <$> ts 
 untagUnion t = t
 
-writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
-writeCustomTypes opts m = Text.intercalate "\n" . Map.elems $ Map.mapWithKey writeCustomType m
+writeCustomType :: TsGenOptions -> (TypeRep, TsType) -> Text
+writeCustomType opts (tr, t) = let prefix = "export type " <> tsUnqualifiedCustomTypeName tr
+                                in i' <> prefix <> " = " <> writeCustomTypeDef (Text.length prefix) (untagUnion t) <> ";\n"
     where i' = makeIndent opts
-        
-          writeCustomType :: TypeRep -> TsType -> Text
-          writeCustomType tr t = let prefix = "export type " <> tsCustomTypeName tr
-                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) (untagUnion t) <> ";\n"
-                                                
+         
           writeCustomTypeDef :: Int -> TsType -> Text
-          writeCustomTypeDef i (TsUnion ts) = Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i <$> ts)
+          writeCustomTypeDef i (TsUnion ts) = Text.intercalate ("\n\t" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i <$> ts)
 
           writeCustomTypeDef i (TsObject ts) = "{ " <> Text.intercalate ", " ((\(n, t) -> n <> ": " <> writeCustomTypeDef i t) <$> ts) <> " }"
 
           writeCustomTypeDef i (TsTuple ts) = let tuple = Text.intercalate ", " $ writeCustomTypeDef i <$> ts
-                                               in if length ts == 1 then tuple else "[" <> tuple <> "]"
+                                                in if length ts == 1 then tuple else "[" <> tuple <> "]"
 
           writeCustomTypeDef _ t = tsTypeName t
 
           makeQualifiedType :: Text -> TypeRep -> Text
-          makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
+          makeQualifiedType n ts = Text.intercalate "_" (n : (tsUnqualifiedCustomTypeName <$> typeRepArgs ts))
+
+writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
+writeCustomTypes opts m = let as = (\t -> (Text.pack . tyConModule . typeRepTyCon . fst $ t, t)) <$> Map.assocs m
+                              gs = groupBy (\l r -> fst l == fst r) . sortBy (\l r -> fst l `compare` fst r) $ as
+                              gs' = (\g -> (fst . head $ g, snd <$> g)) <$> gs
+                              t = (\g -> "export namespace " <> fst g <> "\n" <>
+                                         "{\n" <>
+                                         Text.intercalate "\n" (writeCustomType opts <$> snd g) <>
+                                         "}") <$> gs' 
+                           in Text.intercalate "\n\n" t
 
 writeEndpoints :: TsGenOptions -> [Req (TsContext TsType)] -> Text 
 writeEndpoints opts ts = let (TsContext ts' m) = sequence (writeEndpoint opts <$> ts)
                          in "import * as $ from 'jquery';\n\n" <> 
-                            writeCustomTypes opts m <> "\n" <>
+                            writeCustomTypes opts m <> "\n\n" <>
                             Text.intercalate "\n\n" ts' <> "\n"
 
 data TsType = TsVoid
