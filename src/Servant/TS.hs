@@ -87,6 +87,7 @@ tsTypeName TsNever = "never"
 tsTypeName TsBoolean = "boolean"
 tsTypeName TsNumber = "number"
 tsTypeName TsString = "string"
+tsTypeName (TsStringLiteral n) = "\"" <> n <> "\""
 tsTypeName (TsNullable t) = tsTypeName t {- <> "?" -}
 tsTypeName (TsRef t) = tsCustomTypeName t 
 tsTypeName (TsArray t) = "Array<" <> tsTypeName t <> ">"
@@ -157,28 +158,37 @@ writeEndpoint opts t = do
           writeTsType TsBoolean = "boolean"
           writeTsType TsNumber = "number"
           writeTsType TsString = "string"
-          writeTsType (TsUnion ts) = Text.intercalate " | " (writeTsType <$> ts)
+          writeTsType (TsStringLiteral n) = "\"" <> n <> "\"" 
+          writeTsType (TsUnion _ ts) = Text.intercalate " | " (writeTsType <$> ts)
           writeTsType (TsNullable t) = (writeTsType t) <> " | null"
 
           quote :: Text -> Text
           quote s = makeQuote opts <> s <> makeQuote opts
 
 writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
-writeCustomTypes opts m = Text.intercalate "\n" . concat . Map.elems $ Map.mapWithKey writeCustomType m
+writeCustomTypes opts m = Text.intercalate "\n" . Map.elems $ Map.mapWithKey writeCustomType m
     where i' = makeIndent opts
         
-          writeCustomType :: TypeRep -> TsType -> [Text]
-          writeCustomType k (TsUnion ts) = let alias = i' <> "export type " <> tsCustomTypeName k <> " = " <> Text.intercalate " | " (getConName k <$> ts) <> ";\n"
-                                               types = concat $ writeCustomType k <$> ts
-                                            in alias : types
-            
-          writeCustomType k (TsObject n ts) = ["export interface " <> makeQualifiedType n k <> "\n" <> 
-                                               "{\n" <>
-                                               Text.intercalate "\n" ((\(n, t) -> i' <> n <> ": " <> tsTypeName t <> ";") <$> ts) <> "\n" <>
-                                               "}\n"]
+          writeCustomType :: TypeRep -> TsType -> Text
+          writeCustomType tr t = let prefix = "export type " <> tsCustomTypeName tr
+                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) Nothing t <> ";\n"
+                                                
+          writeMap :: (a -> Text) -> [(Text, a)] -> Text
+          writeMap f = ("{ " <> ) . (<> " }") . Text.intercalate ", " . fmap (\(n, t) -> n <> ": " <> f t)
 
-          writeCustomType k (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
-                                              in ["export type " <> makeQualifiedType n k <> " = " <> "[" <> tuple <> "];\n"]
+          writeCustomTypeDef :: Int -> Maybe Text -> TsType -> Text
+          writeCustomTypeDef i _ (TsUnion tn ts) = Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i (Just tn) <$> ts)
+          
+          writeCustomTypeDef _ tn (TsObject n ts) = let ts' = case tn of
+                                                                Just tn' -> (tn', TsStringLiteral n) : ts
+                                                                Nothing -> ts 
+                                                     in writeMap tsTypeName ts'
+
+          writeCustomTypeDef _ tn (TsTuple n ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
+                                                       tupleWrap = if length ts == 1 then tuple else "[" <> tuple <> "]"
+                                                    in case tn of
+                                                           Just tn' -> writeMap id [(tn', "\"" <> n <> "\""), ("contents", tupleWrap)]
+                                                           Nothing -> tupleWrap
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
@@ -198,7 +208,8 @@ data TsType = TsVoid
             | TsBoolean
             | TsNumber
             | TsString
-            | TsUnion [TsType]
+            | TsStringLiteral Text
+            | TsUnion Text {- tag field name -} [TsType]
             | TsNullable TsType
             | TsArray TsType
             | TsObject Text [(Text, TsType)]
@@ -233,7 +244,7 @@ instance (Datatype a, TsConstructor c) => TsDatatype (D1 a c) where
     tsDatatype c@(M1 r) t = do
         cons <- tsConstructor r
         let tsType = if length cons == 1 then head cons
-                                         else TsUnion cons
+                                         else TsUnion "tag" cons
         TsContext (TsRef t) (Map.insert t tsType Map.empty)
 
 class TsConstructor a where
@@ -244,7 +255,7 @@ instance (TsConstructor a, TsConstructor b) => TsConstructor (a :+: b) where
         l <- (tsConstructor (undefined :: a f))
         r <- (tsConstructor (undefined :: b f))
         return $ l ++ r
-                                         
+
 instance (Constructor a, TsSelector c) => TsConstructor (C1 a c) where
     tsConstructor c@(M1 r) = do
         sels <- tsSelector r
