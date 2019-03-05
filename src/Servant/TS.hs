@@ -166,24 +166,30 @@ writeEndpoint opts t = do
           quote :: Text -> Text
           quote s = makeQuote opts <> s <> makeQuote opts
 
+untagUnion :: TsType -> TsType
+untagUnion (TsTaggedUnion tn ts) = TsUnion $ (\(n, t) -> case t of 
+                                                             (TsObject ts') -> TsObject ((tn, TsStringLiteral n): ts')
+                                                             (TsTuple ts') -> TsObject [(tn, TsStringLiteral n), ("contents", TsTuple ts')]
+                                             ) <$> ts 
+untagUnion t = t
+
 writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
 writeCustomTypes opts m = Text.intercalate "\n" . Map.elems $ Map.mapWithKey writeCustomType m
     where i' = makeIndent opts
         
           writeCustomType :: TypeRep -> TsType -> Text
           writeCustomType tr t = let prefix = "export type " <> tsCustomTypeName tr
-                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) t <> ";\n"
+                                  in prefix <> " = " <> writeCustomTypeDef (Text.length prefix) (untagUnion t) <> ";\n"
                                                 
           writeCustomTypeDef :: Int -> TsType -> Text
-          writeCustomTypeDef i (TsTaggedUnion tn ts) = let sts = \t -> case t of
-                                                                           (n, (TsObject ts')) -> TsObject ((tn, TsStringLiteral n) : ts')
-                                                                           (n, (TsTuple ts')) -> TsObject [(tn, TsStringLiteral n), ("contents", TsLiteral (writeCustomTypeDef i (TsTuple ts')))]
-                                                        in Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i . sts <$> ts)
-          
-          writeCustomTypeDef _ (TsObject ts) = "{ " <> Text.intercalate ", " ((\(n, t) -> n <> ": " <> tsTypeName t) <$> ts) <> " }"
+          writeCustomTypeDef i (TsUnion ts) = Text.intercalate ("\n" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i <$> ts)
 
-          writeCustomTypeDef _ (TsTuple ts) = let tuple = Text.intercalate ", " $ tsTypeName <$> ts
+          writeCustomTypeDef i (TsObject ts) = "{ " <> Text.intercalate ", " ((\(n, t) -> n <> ": " <> writeCustomTypeDef i t) <$> ts) <> " }"
+
+          writeCustomTypeDef i (TsTuple ts) = let tuple = Text.intercalate ", " $ writeCustomTypeDef i <$> ts
                                                in if length ts == 1 then tuple else "[" <> tuple <> "]"
+
+          writeCustomTypeDef _ t = tsTypeName t
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsCustomTypeName <$> typeRepArgs ts))
@@ -201,6 +207,7 @@ data TsType = TsVoid
             | TsString
             | TsLiteral Text
             | TsStringLiteral Text
+            | TsUnion [TsType]
             | TsTaggedUnion Text {- tag field name -} [(Text, TsType)]
             | TsNullable TsType
             | TsArray TsType
