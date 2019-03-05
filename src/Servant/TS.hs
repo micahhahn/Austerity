@@ -359,10 +359,14 @@ instance TsTypeable Version where
 instance (TsTypeable a) => TsTypeable (Maybe a) where
     tsTypeRep _ = TsNullable <$> (tsTypeRep (Proxy :: Proxy a))
 
-{-
-instance (TsTypeable a, TsTypeable b) => TsTypeable (Either a b) where
-    tsTypeRep _ = return TsUnion 
--}
+instance (Typeable a, TsTypeable a, Typeable b, TsTypeable b) => TsTypeable (Either a b) where
+    tsTypeRep _ = do 
+        l <- tsTypeRep (Proxy :: Proxy a)
+        r <- tsTypeRep (Proxy :: Proxy b)
+        let t = TsUnion [TsObject [("Left", l)], TsObject [("Right", r)]]
+        let tr = typeRep (Proxy :: Proxy (Either a b))
+        TsContext undefined $ Map.insert tr t Map.empty
+        return (TsRef tr)
 
 instance (TsTypeable a) => TsTypeable [a] where
     tsTypeRep _ = TsArray <$> (tsTypeRep (Proxy :: Proxy a))
