@@ -486,31 +486,177 @@ instance TsTypeable LocalTime where
 
 {- instance ToJSON b => ToJSON (Tagged a b) where -}
 
-{- instance (ToJSON a, ToJSON b) => ToJSON (a, b) where -}
+instance (TsTypeable a, TsTypeable b) => TsTypeable (a, b) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        return $ TsTuple [a', b']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c) => ToJSON (a, b, c) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c) => TsTypeable (a, b, c) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        return $ TsTuple [a', b', c']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d) => ToJSON (a, b, c, d) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d) => TsTypeable (a, b, c, d) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        return $ TsTuple [a', b', c', d']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e) => ToJSON (a, b, c, d, e) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e) => TsTypeable (a, b, c, d, e) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        return $ TsTuple [a', b', c', d', e']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f) => ToJSON (a, b, c, d, e, f) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f) => TsTypeable (a, b, c, d, e, f) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        return $ TsTuple [a', b', c', d', e', f']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g) => ToJSON (a, b, c, d, e, f, g) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g) => TsTypeable (a, b, c, d, e, f, g) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        return $ TsTuple [a', b', c', d', e', f', g']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h) => ToJSON (a, b, c, d, e, f, g, h) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h) => TsTypeable (a, b, c, d, e, f, g, h) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        return $ TsTuple [a', b', c', d', e', f', g', h']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i) => ToJSON (a, b, c, d, e, f, g, h, i) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i) => TsTypeable (a, b, c, d, e, f, g, h, i) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j) => ToJSON (a, b, c, d, e, f, g, h, i, j) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j) => TsTypeable (a, b, c, d, e, f, g, h, i, j) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j, ToJSON k) => ToJSON (a, b, c, d, e, f, g, h, i, j, k) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j, TsTypeable k) => TsTypeable (a, b, c, d, e, f, g, h, i, j, k) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        k' <- tsTypeRep (Proxy :: Proxy k)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j, ToJSON k, ToJSON l) => ToJSON (a, b, c, d, e, f, g, h, i, j, k, l) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j, TsTypeable k, TsTypeable l) => TsTypeable (a, b, c, d, e, f, g, h, i, j, k, l) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        k' <- tsTypeRep (Proxy :: Proxy k)
+        l' <- tsTypeRep (Proxy :: Proxy l)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k', l']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j, ToJSON k, ToJSON l, ToJSON m) => ToJSON (a, b, c, d, e, f, g, h, i, j, k, l, m) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j, TsTypeable k, TsTypeable l, TsTypeable m) => TsTypeable (a, b, c, d, e, f, g, h, i, j, k, l, m) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        k' <- tsTypeRep (Proxy :: Proxy k)
+        l' <- tsTypeRep (Proxy :: Proxy l)
+        m' <- tsTypeRep (Proxy :: Proxy m)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k', l', m']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j, ToJSON k, ToJSON l, ToJSON m, ToJSON n) => ToJSON (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where -}
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j, TsTypeable k, TsTypeable l, TsTypeable m, TsTypeable n) => TsTypeable (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        k' <- tsTypeRep (Proxy :: Proxy k)
+        l' <- tsTypeRep (Proxy :: Proxy l)
+        m' <- tsTypeRep (Proxy :: Proxy m)
+        n' <- tsTypeRep (Proxy :: Proxy n)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k', l', m', n']
 
-{- instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e, ToJSON f, ToJSON g, ToJSON h, ToJSON i, ToJSON j, ToJSON k, ToJSON l, ToJSON m, ToJSON n, ToJSON o) => ToJSON (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where -}
-
+instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, TsTypeable f, TsTypeable g, TsTypeable h, TsTypeable i, TsTypeable j, TsTypeable k, TsTypeable l, TsTypeable m, TsTypeable n, TsTypeable o) => TsTypeable (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
+    tsTypeRep _ = do
+        a' <- tsTypeRep (Proxy :: Proxy a)
+        b' <- tsTypeRep (Proxy :: Proxy b)
+        c' <- tsTypeRep (Proxy :: Proxy c)
+        d' <- tsTypeRep (Proxy :: Proxy d)
+        e' <- tsTypeRep (Proxy :: Proxy e)
+        f' <- tsTypeRep (Proxy :: Proxy f)
+        g' <- tsTypeRep (Proxy :: Proxy g)
+        h' <- tsTypeRep (Proxy :: Proxy h)
+        i' <- tsTypeRep (Proxy :: Proxy i)
+        j' <- tsTypeRep (Proxy :: Proxy j)
+        k' <- tsTypeRep (Proxy :: Proxy k)
+        l' <- tsTypeRep (Proxy :: Proxy l)
+        m' <- tsTypeRep (Proxy :: Proxy m)
+        n' <- tsTypeRep (Proxy :: Proxy n)
+        o' <- tsTypeRep (Proxy :: Proxy o)
+        return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k', l', m', n', o']
