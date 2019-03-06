@@ -460,9 +460,11 @@ instance TsTypeable LocalTime where
 
 {- instance ToJSON UTCTime where -}
 
-{- instance ToJSON NominalDiffTime where -}
+instance TsTypeable NominalDiffTime where
+    tsTypeRep _ = return TsNumber
 
-{- instance ToJSON DiffTime where -}
+instance TsTypeable DiffTime where
+    tsTypeRep _ = return TsNumber
 
 {- instance ToJSON a => ToJSON (Monoid.Dual a) where -}
 
@@ -482,9 +484,13 @@ instance TsTypeable LocalTime where
 
 {- instance ToJSON a => ToJSON (Semigroup.Option a) where -}
 
-{- instance ToJSON (Proxy a) where -}
+instance TsTypeable (Proxy a) where
+    tsTypeRep _ = return TsNever
 
-{- instance ToJSON b => ToJSON (Tagged a b) where -}
+{- 
+instance TsTypeable b => TsTypeable (Tagged a b) where
+    tsTypeRep _ = tsTypeRep (Proxy :: Proxy b)
+-}
 
 instance (TsTypeable a, TsTypeable b) => TsTypeable (a, b) where
     tsTypeRep _ = do
