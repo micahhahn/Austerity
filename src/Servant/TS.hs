@@ -78,6 +78,12 @@ tsForAPI api opts = writeEndpoints opts $ listFromAPI (Proxy :: Proxy TypeScript
 
 {- Using 'data' in jquery options potentially incorrect? -}
 
+{- Currently we are outputting every use of a polymorphic type by adding the type arguments as a suffix to the name. 
+   AFAIK Typeable does not give us a way to determine if a type argument is of kind * or k -> *. That shouldn't matter
+   though in this case because we will only be able to work backwards from concrete types if the type argument is used so
+   we can effectively ignore phantom types and higher kinded types alike.
+-}
+
 tsUnqualifiedCustomTypeName :: TypeRep -> Text
 tsUnqualifiedCustomTypeName t = let tn = sanitizeTSName . Text.pack . tyConName . typeRepTyCon $ t
                                  in Text.intercalate "_" (tn : (tsUnqualifiedCustomTypeName <$> typeRepArgs t))
@@ -180,12 +186,16 @@ untagUnion (TsTaggedUnion tn ts) = TsUnion $ (\(n, t) -> case t of
 untagUnion t = t
 
 writeCustomType :: TsGenOptions -> (TypeRep, TsType) -> Text
-writeCustomType opts (tr, t) = let prefix = "export type " <> tsUnqualifiedCustomTypeName tr
-                                in i' <> prefix <> " = " <> writeCustomTypeDef (Text.length prefix) (untagUnion t) <> ";\n"
+writeCustomType opts (tr, t) = let prefix = "export type " <> typeName
+                                in i' <> prefix <> " = " <> writeCustomTypeDef (Text.length prefix) (untagUnion t) <> "\n"
     where i' = makeIndent opts
+          typeName = tsUnqualifiedCustomTypeName tr
          
           writeCustomTypeDef :: Int -> TsType -> Text
           writeCustomTypeDef i (TsUnion ts) = Text.intercalate ("\n\t" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i <$> ts)
+
+          writeCustomTypeDef i (TsUntaggedUnion ts) = let typeRep = Text.intercalate ("\n\t" <> Text.replicate i " " <> " | ") (writeCustomTypeDef i . snd <$> ts)
+                                                       in Text.intercalate "\n\n" (typeRep : (writeTypeGuard <$> ts))
 
           writeCustomTypeDef i (TsObject ts) = "{ " <> Text.intercalate ", " ((\(n, t) -> n <> ": " <> writeCustomTypeDef i t) <$> ts) <> " }"
 
@@ -196,6 +206,14 @@ writeCustomType opts (tr, t) = let prefix = "export type " <> tsUnqualifiedCusto
 
           makeQualifiedType :: Text -> TypeRep -> Text
           makeQualifiedType n ts = Text.intercalate "_" (n : (tsUnqualifiedCustomTypeName <$> typeRepArgs ts))
+
+          writeTypeGuard :: (Text, TsType) -> Text
+          writeTypeGuard (n, TsObject ts) = let tr = writeCustomTypeDef 0 (TsObject ts)
+                                             in i' <> "export function is" <> n <> "($u: " <> typeName <> "): $u is " <> tr <> "\n" <>
+                                                i' <> "{\n" <>
+                                                i' <> i' <> "let $t = <" <> tr <> ">$u;\n" <>
+                                                i' <> i' <> "return " <> Text.intercalate " && " (("$t." <> ) . (<> " !== undefined") . fst <$> ts) <> ";\n" <>
+                                                i' <> "}"
 
 writeCustomTypes :: TsGenOptions -> Map TypeRep TsType -> Text
 writeCustomTypes opts m = let as = (\t -> (Text.pack . tyConModule . typeRepTyCon . fst $ t, t)) <$> Map.assocs m
@@ -221,6 +239,7 @@ data TsType = TsVoid
             | TsLiteral Text
             | TsStringLiteral Text
             | TsUnion [TsType]
+            | TsUntaggedUnion [(Text, TsType)]
             | TsTaggedUnion Text {- tag field name -} [(Text, TsType)]
             | TsNullable TsType
             | TsArray TsType
@@ -376,7 +395,7 @@ instance (Typeable a, TsTypeable a, Typeable b, TsTypeable b) => TsTypeable (Eit
     tsTypeRep _ = do 
         l <- tsTypeRep (Proxy :: Proxy a)
         r <- tsTypeRep (Proxy :: Proxy b)
-        let t = TsUnion [TsObject [("Left", l)], TsObject [("Right", r)]]
+        let t = TsUntaggedUnion [("Left", TsObject [("Left", l)]), ("Right", TsObject [("Right", r)])]
         let tr = typeRep (Proxy :: Proxy (Either a b))
         TsContext undefined $ Map.insert tr t Map.empty
         return (TsRef tr)
