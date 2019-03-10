@@ -23,7 +23,9 @@ import Data.Fixed (Fixed, HasResolution)
 import Data.Functor.Compose (Compose)
 import Data.Functor.Const (Const)
 import Data.Functor.Identity (Identity)
+import qualified Data.HashMap.Strict as HMS
 import Data.Int (Int8, Int16, Int32, Int64)
+import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
 import Data.List (groupBy, sortBy)
 import Data.List.NonEmpty (NonEmpty)
@@ -104,6 +106,7 @@ tsTypeName (TsStringLiteral n) = "\"" <> n <> "\""
 tsTypeName (TsNullable t) = tsTypeName t {- <> "?" -}
 tsTypeName (TsRef t) = tsCustomTypeName t 
 tsTypeName (TsArray t) = "Array<" <> tsTypeName t <> ">"
+tsTypeName (TsMap t) = "{[key: string]: " <> tsTypeName t <> "}"
 
 makeQuote :: TsGenOptions -> Text
 makeQuote opts = case _quotes opts of
@@ -241,6 +244,7 @@ data TsType = TsVoid
             | TsUnion [TsType]
             | TsUntaggedUnion [(Text, TsType)]
             | TsTaggedUnion Text {- tag field name -} [(Text, TsType)]
+            | TsMap TsType
             | TsNullable TsType
             | TsArray TsType
             | TsObject [(Text, TsType)]
@@ -441,9 +445,21 @@ instance (TsTypeable a) => TsTypeable (Set a) where
 instance TsTypeable IntSet where
     tsTypeRep _ = return $ TsArray TsNumber
 
-{- instance TsType IntMap where -}
+makeMap :: (TsTypeableKey k, TsTypeable v) => Proxy k -> Proxy v -> TsContext TsType
+makeMap k v = do
+    kt <- tsKeyTypeRep k
+    vt <- tsTypeRep v
+    case kt of
+        TsString -> return $ TsMap vt
+        a -> return $ TsArray (TsTuple [kt, vt])
+
+instance (TsTypeable v) => TsTypeable (IntMap v) where
+    tsTypeRep _ = makeMap (Proxy :: Proxy Int) (Proxy :: Proxy v)
 
 {- instance TsType Tree where -}
+
+instance (TsTypeableKey k, TsTypeable v) => TsTypeable (Map.Map k v) where
+    tsTypeRep _ = makeMap (Proxy :: Proxy k) (Proxy :: Proxy v)
 
 {- instance TsType UUID -}
 
@@ -458,7 +474,8 @@ instance (TsTypeable a) => TsTypeable (V.Vector a) where
 
 {- instance HashSet -}
 
-{- instance HashMap -}
+instance (TsTypeableKey k, TsTypeable v) => TsTypeable (HMS.HashMap k v) where
+    tsTypeRep _ = makeMap (Proxy :: Proxy k) (Proxy :: Proxy v)
 
 {- instance PM.Array -}
 
@@ -685,3 +702,88 @@ instance (TsTypeable a, TsTypeable b, TsTypeable c, TsTypeable d, TsTypeable e, 
         n' <- tsTypeRep (Proxy :: Proxy n)
         o' <- tsTypeRep (Proxy :: Proxy o)
         return $ TsTuple [a', b', c', d', e', f', g', h', i', j', k', l', m', n', o']
+
+class TsTypeableKey a where
+    tsKeyTypeRep :: Proxy a -> TsContext TsType 
+
+instance TsTypeableKey Bool where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Char where 
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Double where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Float where 
+    tsKeyTypeRep _ = return TsString 
+
+instance TsTypeableKey Int where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Int8 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Int16 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Int32 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Int64 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Integer where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Natural where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Word where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Word8 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Word16 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Word32 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Word64 where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Text where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey LT.Text where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Version where
+    tsKeyTypeRep _ = return TsString
+
+{-
+instance TsTypeableKey Scientific where
+    tsKeyTypeRep _ = return TsString
+-}
+
+instance TsTypeableKey ZonedTime where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey LocalTime where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey TimeOfDay where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey UTCTime where
+    tsKeyTypeRep _ = return TsString
+
+instance TsTypeableKey Day where
+    tsKeyTypeRep _ = return TsString
+
+{-
+instance TsTypeableKey UUID where
+    tsKeyTypeRep _ = return TsString
+-}
